@@ -106,7 +106,7 @@ const levelEl = document.getElementById('level');
 const TILE_SIZE = 16;
 let SPEED = 2;
 
-// Carte Arcade originale (31 lignes x 28 colonnes)
+// Carte Arcade (31 lignes x 28 colonnes)
 // 1: Mur, 0: Dot, 2: Power Pellet, 3: Vide, 4: Porte Cage, 5: Cage Intérieur
 const initialMap = [
     [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
@@ -180,12 +180,10 @@ class Pacman {
     }
 
     update() {
-        // Tente de tourner dès que possible (cornering / tolérance de virage)
         if (this.nextDirX !== 0 || this.nextDirY !== 0) {
             if (this.canTurn(this.nextDirX, this.nextDirY)) {
                 this.dirX = this.nextDirX;
                 this.dirY = this.nextDirY;
-                // Alignement automatique sur la grille lors des virages
                 if (this.dirX !== 0) this.y = Math.round(this.y / TILE_SIZE) * TILE_SIZE;
                 if (this.dirY !== 0) this.x = Math.round(this.x / TILE_SIZE) * TILE_SIZE;
             }
@@ -196,14 +194,12 @@ class Pacman {
             this.y += this.dirY * SPEED;
         }
 
-        // Passage du tunnel latéral
         if (this.x < -TILE_SIZE / 2) {
             this.x = canvas.width - TILE_SIZE / 2;
         } else if (this.x > canvas.width - TILE_SIZE / 2) {
             this.x = -TILE_SIZE / 2;
         }
 
-        // Manger les dots
         let centerGridX = Math.floor((this.x + TILE_SIZE / 2) / TILE_SIZE);
         let centerGridY = Math.floor((this.y + TILE_SIZE / 2) / TILE_SIZE);
 
@@ -215,18 +211,16 @@ class Pacman {
             map[centerGridY][centerGridX] = 3;
             score += 50;
             remainingDots--;
-            powerTimer = 360; // ~6 secondes de mode apeuré
+            powerTimer = 360;
         }
 
         scoreEl.innerText = score;
 
-        // Bouche
         this.mouthAngle += this.mouthSpeed;
         if (this.mouthAngle > 0.4 || this.mouthAngle < 0.05) {
             this.mouthSpeed = -this.mouthSpeed;
         }
 
-        // Détection de fin de niveau
         if (remainingDots === 0) {
             nextLevel();
         }
@@ -235,8 +229,6 @@ class Pacman {
     canTurn(dx, dy) {
         let gridX = Math.round(this.x / TILE_SIZE);
         let gridY = Math.round(this.y / TILE_SIZE);
-        
-        // Tolérance d'alignement pour tourner
         let alignThreshold = 6;
         let alignedX = Math.abs(this.x - gridX * TILE_SIZE) <= alignThreshold;
         let alignedY = Math.abs(this.y - gridY * TILE_SIZE) <= alignThreshold;
@@ -244,10 +236,7 @@ class Pacman {
         if (dx !== 0 && !alignedY) return false;
         if (dy !== 0 && !alignedX) return false;
 
-        let checkX = gridX + dx;
-        let checkY = gridY + dy;
-
-        return isWalkable(checkY, checkX, true);
+        return isWalkable(gridY + dy, gridX + dx, true);
     }
 
     canMove(dx, dy) {
@@ -255,7 +244,6 @@ class Pacman {
         let nextX = this.x + dx * SPEED;
         let nextY = this.y + dy * SPEED;
 
-        // En dehors du canevas (tunnel)
         if (nextX < 0 || nextX + TILE_SIZE > canvas.width) return true;
 
         let corners = [
@@ -265,11 +253,7 @@ class Pacman {
             { x: nextX + TILE_SIZE - 1, y: nextY + TILE_SIZE - 1 }
         ];
 
-        return corners.every(c => {
-            let gx = Math.floor(c.x / TILE_SIZE);
-            let gy = Math.floor(c.y / TILE_SIZE);
-            return isWalkable(gy, gx, true);
-        });
+        return corners.every(c => isWalkable(Math.floor(c.y / TILE_SIZE), Math.floor(c.x / TILE_SIZE), true));
     }
 
     draw() {
@@ -294,16 +278,16 @@ class Pacman {
 }
 
 function isWalkable(r, c, isPacman = false) {
-    if (!map[r]) return true; // Pour la traversée du tunnel
+    if (r < 0 || r >= map.length || c < 0 || c >= map[0].length) return true;
     let tile = map[r][c];
-    if (tile === 1) return false; // Mur
-    if (tile === 4 && isPacman) return false; // Porte réservée aux fantômes
+    if (tile === 1) return false;
+    if ((tile === 4 || tile === 5) && isPacman) return false; // Bloquer Pac-Man hors de la cage
     return true;
 }
 
 class Ghost {
     constructor(type, color, startX, startY) {
-        this.type = type; // 'blinky', 'pinky', 'inky', 'clyde'
+        this.type = type;
         this.color = color;
         this.startX = startX * TILE_SIZE;
         this.startY = startY * TILE_SIZE;
@@ -318,16 +302,13 @@ class Ghost {
     }
 
     update() {
-        // Ralentir dans les tunnels
         let currentGridY = Math.floor((this.y + TILE_SIZE / 2) / TILE_SIZE);
         let inTunnel = (currentGridY === 14 && (this.x < 5 * TILE_SIZE || this.x > 22 * TILE_SIZE));
         let ghostSpeed = powerTimer > 0 ? SPEED * 0.5 : (inTunnel ? SPEED * 0.6 : SPEED * 0.85);
 
-        // Tunnel Wrap
         if (this.x < -TILE_SIZE / 2) this.x = canvas.width - TILE_SIZE / 2;
         if (this.x > canvas.width - TILE_SIZE / 2) this.x = -TILE_SIZE / 2;
 
-        // Décision de direction aux intersections (alignement sur la grille)
         let gridX = Math.round(this.x / TILE_SIZE);
         let gridY = Math.round(this.y / TILE_SIZE);
 
@@ -351,8 +332,14 @@ class Ghost {
             { x: 1, y: 0 }
         ];
 
-        // Éliminer le demi-tour direct
-        let validDirs = possibleDirs.filter(d => !(d.x === -this.dirX && d.y === -this.dirY) && isWalkable(gy + d.y, gx + d.x, false));
+        // Éviter le demi-tour direct & vérifier la liberté de mouvement
+        let validDirs = possibleDirs.filter(d => {
+            if (d.x === -this.dirX && d.y === -this.dirY) return false;
+            let targetTile = map[gy + d.y] ? map[gy + d.y][gx + d.x] : undefined;
+            // Interdire de rentrer à nouveau dans la porte rose de la cage (tile 4) une fois dehors
+            if (targetTile === 4 && gy < 12) return false;
+            return isWalkable(gy + d.y, gx + d.x, false);
+        });
 
         if (validDirs.length === 0) {
             this.dirX = -this.dirX;
@@ -361,15 +348,18 @@ class Ghost {
         }
 
         if (powerTimer > 0) {
-            // Fuite aléatoire en mode apeuré
             let choice = validDirs[Math.floor(Math.random() * validDirs.length)];
             this.dirX = choice.x;
             this.dirY = choice.y;
             return;
         }
 
-        // IA ciblant la position selon le fantôme
-        let target = this.getTargetPosition();
+        // Cible sécurisée (Restreinte à la taille du labyrinthe)
+        let rawTarget = this.getTargetPosition();
+        let target = {
+            x: Math.max(0, Math.min(27, rawTarget.x)),
+            y: Math.max(0, Math.min(30, rawTarget.y))
+        };
 
         let bestDir = validDirs[0];
         let minDistance = Infinity;
@@ -393,20 +383,20 @@ class Ghost {
         let pacY = Math.floor(pacman.y / TILE_SIZE);
 
         switch (this.type) {
-            case 'blinky': // Attaque directe
+            case 'blinky':
                 return { x: pacX, y: pacY };
-            case 'pinky': // Anticipation (4 cases devant Pac-Man)
+            case 'pinky':
                 return { x: pacX + pacman.dirX * 4, y: pacY + pacman.dirY * 4 };
-            case 'inky': // Prise en tenaille avec Blinky
+            case 'inky':
                 let bX = Math.floor(ghosts[0].x / TILE_SIZE);
                 let bY = Math.floor(ghosts[0].y / TILE_SIZE);
                 let vecX = (pacX + pacman.dirX * 2) - bX;
                 let vecY = (pacY + pacman.dirY * 2) - bY;
                 return { x: bX + vecX * 2, y: bY + vecY * 2 };
-            case 'clyde': // Chasseur si loin, fuyard si proche (< 8 cases)
+            case 'clyde':
                 let dist = Math.hypot(Math.floor(this.x / TILE_SIZE) - pacX, Math.floor(this.y / TILE_SIZE) - pacY);
                 if (dist > 8) return { x: pacX, y: pacY };
-                return { x: 0, y: 31 }; // Coin inférieur gauche
+                return { x: 0, y: 30 };
         }
     }
 
@@ -418,7 +408,6 @@ class Ghost {
         ctx.lineTo(this.x + 1, this.y + TILE_SIZE);
         ctx.fill();
 
-        // Yeux
         if (powerTimer === 0) {
             ctx.fillStyle = 'white';
             ctx.beginPath();
@@ -443,7 +432,7 @@ const ghosts = [
     new Ghost('clyde', 'orange', 15.5, 14)
 ];
 
-// Contrôles Flèches (Mac/PC)
+// Clavier Mac / PC
 window.addEventListener('keydown', e => {
     switch (e.key) {
         case 'ArrowUp': pacman.nextDirX = 0; pacman.nextDirY = -1; break;
@@ -453,13 +442,13 @@ window.addEventListener('keydown', e => {
     }
 });
 
-// Contrôles Tactiles (D-Pad iOS)
+// Touch D-Pad
 document.getElementById('btn-up').addEventListener('touchstart', (e) => { e.preventDefault(); pacman.nextDirX = 0; pacman.nextDirY = -1; });
 document.getElementById('btn-down').addEventListener('touchstart', (e) => { e.preventDefault(); pacman.nextDirX = 0; pacman.nextDirY = 1; });
 document.getElementById('btn-left').addEventListener('touchstart', (e) => { e.preventDefault(); pacman.nextDirX = -1; pacman.nextDirY = 0; });
 document.getElementById('btn-right').addEventListener('touchstart', (e) => { e.preventDefault(); pacman.nextDirX = 1; pacman.nextDirY = 0; });
 
-// Contrôles Swipe iOS
+// Swipe iOS
 let touchStartX = 0, touchStartY = 0;
 canvas.addEventListener('touchstart', e => {
     touchStartX = e.touches[0].clientX;
@@ -527,7 +516,7 @@ function checkCollisions() {
 function nextLevel() {
     level++;
     levelEl.innerText = level;
-    SPEED = Math.min(3, 2 + level * 0.1); // Accélération modérée
+    SPEED = Math.min(3, 2 + level * 0.1);
     cloneMap();
     pacman.reset();
     ghosts.forEach(g => g.reset());
@@ -563,7 +552,6 @@ function gameLoop() {
     requestAnimationFrame(gameLoop);
 }
 
-// Initialisation
 cloneMap();
 gameLoop();
 </script>
