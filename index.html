@@ -101,7 +101,7 @@ const levelEl = document.getElementById('level');
 
 const TILE_SIZE = 16;
 const PACMAN_SPEED = 2;
-const GHOST_SPEED = 1.6;
+const GHOST_SPEED = 2;
 
 // 0: Pac-dot, 1: Wall, 2: Power Pellet, 3: Empty, 4: Ghost Door
 const initialMap = [
@@ -272,44 +272,47 @@ class Ghost {
     }
 
     update() {
-        let speed = powerTimer > 0 ? GHOST_SPEED * 0.5 : GHOST_SPEED;
+        let speed = powerTimer > 0 ? 1 : GHOST_SPEED;
 
         if (this.state === 'IN_HOUSE') {
             if (this.exitTimer > 0) {
                 this.exitTimer--;
                 return;
             }
-            this.state = 'EXITING';
+            this.state = 'EXITING_ALIGN';
         }
 
-        if (this.state === 'EXITING') {
+        // Alignement horizontal vers la porte (colonne 13)
+        if (this.state === 'EXITING_ALIGN') {
             let targetX = 13 * TILE_SIZE;
-            let targetY = 11 * TILE_SIZE;
-
-            if (Math.abs(this.x - targetX) > speed) {
-                this.x += (this.x < targetX ? speed : -speed);
-            } else if (Math.abs(this.y - targetY) > speed) {
+            if (Math.abs(this.x - targetX) <= speed) {
                 this.x = targetX;
-                this.y -= speed;
+                this.state = 'EXITING_UP';
             } else {
-                this.x = targetX;
-                this.y = targetY;
-                this.state = 'OUTSIDE';
-                this.dirX = -1;
-                this.dirY = 0;
+                this.x += (this.x < targetX ? speed : -speed);
             }
             return;
         }
 
-        let gridX = Math.round(this.x / TILE_SIZE);
-        let gridY = Math.round(this.y / TILE_SIZE);
+        // Montée verticale vers la sortie (ligne 11)
+        if (this.state === 'EXITING_UP') {
+            let targetY = 11 * TILE_SIZE;
+            if (Math.abs(this.y - targetY) <= speed) {
+                this.x = 13 * TILE_SIZE;
+                this.y = targetY;
+                this.state = 'OUTSIDE';
+                this.dirX = -1;
+                this.dirY = 0;
+            } else {
+                this.y -= speed;
+            }
+            return;
+        }
 
-        let diffX = Math.abs(this.x - gridX * TILE_SIZE);
-        let diffY = Math.abs(this.y - gridY * TILE_SIZE);
-
-        if (diffX < speed && diffY < speed) {
-            this.x = gridX * TILE_SIZE;
-            this.y = gridY * TILE_SIZE;
+        // Mode labyrinthe principal
+        if (this.x % TILE_SIZE === 0 && this.y % TILE_SIZE === 0) {
+            let gridX = this.x / TILE_SIZE;
+            let gridY = this.y / TILE_SIZE;
             this.chooseNextDirection(gridX, gridY);
         }
 
