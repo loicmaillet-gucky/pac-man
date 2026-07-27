@@ -282,15 +282,17 @@ class Ghost {
         }
 
         if (this.state === 'EXITING') {
-            let targetX = 13.5 * TILE_SIZE - TILE_SIZE / 2;
+            let targetX = 13 * TILE_SIZE;
             let targetY = 11 * TILE_SIZE;
 
+            // Alignement horizontal vers le centre de la porte
             if (Math.abs(this.x - targetX) > speed) {
                 this.x += (this.x < targetX ? speed : -speed);
             } else if (Math.abs(this.y - targetY) > speed) {
                 this.x = targetX;
                 this.y -= speed;
             } else {
+                // Verrouillage strict sur la grille à la sortie
                 this.x = targetX;
                 this.y = targetY;
                 this.state = 'OUTSIDE';
@@ -300,13 +302,14 @@ class Ghost {
             return;
         }
 
+        // Alignement et prise de décision sur la grille
         let gridX = Math.round(this.x / TILE_SIZE);
         let gridY = Math.round(this.y / TILE_SIZE);
         
         let diffX = Math.abs(this.x - gridX * TILE_SIZE);
         let diffY = Math.abs(this.y - gridY * TILE_SIZE);
 
-        if (diffX <= speed && diffY <= speed) {
+        if (diffX < speed && diffY < speed) {
             this.x = gridX * TILE_SIZE;
             this.y = gridY * TILE_SIZE;
             this.chooseNextDirection(gridX, gridY);
@@ -328,12 +331,15 @@ class Ghost {
         ];
 
         let validDirs = possibleDirs.filter(d => {
+            // Empêche le demi-tour direct
             if (d.x === -this.dirX && d.y === -this.dirY) return false;
-            if (gy === 11 && gy + d.y === 12 && (gx === 13 || gx === 14)) return false;
+            // Empêche de re-rentrer dans la cage par le haut
+            if (gy === 11 && d.y === 1 && (gx === 13 || gx === 14)) return false;
             return isTileWalkable(gy + d.y, gx + d.x);
         });
 
         if (validDirs.length === 0) {
+            // Sécurité : si bloqué, fait demi-tour
             this.dirX = -this.dirX;
             this.dirY = -this.dirY;
             return;
