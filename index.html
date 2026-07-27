@@ -277,8 +277,13 @@ class Pacman {
     }
 }
 
+// CORRECTION CRITIQUE : isWalkable bloque strict les cases hors-limites (évite la fuite vers le haut)
 function isWalkable(r, c, isPacman = false) {
-    if (r < 0 || r >= map.length || c < 0 || c >= map[0].length) return true;
+    if (r < 0 || r >= map.length || c < 0 || c >= map[0].length) {
+        // Seul le tunnel latéral (ligne 14) autorise le passage hors de la grille
+        if (r === 14 && (c < 0 || c >= map[0].length)) return true;
+        return false;
+    }
     let tile = map[r][c];
     if (tile === 1) return false;
     if ((tile === 4 || tile === 5) && isPacman) return false; // Bloquer Pac-Man hors de la cage
@@ -297,8 +302,8 @@ class Ghost {
     reset() {
         this.x = this.startX;
         this.y = this.startY;
-        this.dirX = 0;
-        this.dirY = -1;
+        this.dirX = Math.random() < 0.5 ? 1 : -1;
+        this.dirY = 0;
     }
 
     update() {
@@ -335,9 +340,18 @@ class Ghost {
         // Éviter le demi-tour direct & vérifier la liberté de mouvement
         let validDirs = possibleDirs.filter(d => {
             if (d.x === -this.dirX && d.y === -this.dirY) return false;
+            
+            // CORRECTION SORTIE DE CAGE :
+            // Si le fantôme est juste au-dessus de la cage (ligne 11), on lui interdit de monter vers la ligne 10.
+            // Cela l'oblige à tourner à gauche ou à droite dans le couloir !
+            if (gy === 11 && (gx >= 11 && gx <= 16) && d.y === -1) {
+                return false;
+            }
+
             let targetTile = map[gy + d.y] ? map[gy + d.y][gx + d.x] : undefined;
-            // Interdire de rentrer à nouveau dans la porte rose de la cage (tile 4) une fois dehors
-            if (targetTile === 4 && gy < 12) return false;
+            // Interdire de rentrer à nouveau dans la porte de la cage (tile 4 ou 5)
+            if ((targetTile === 4 || targetTile === 5) && gy < 12) return false;
+            
             return isWalkable(gy + d.y, gx + d.x, false);
         });
 
@@ -354,11 +368,11 @@ class Ghost {
             return;
         }
 
-        // Cible sécurisée (Restreinte à la taille du labyrinthe)
+        // Cible calculée et bornée dans le labyrinthe
         let rawTarget = this.getTargetPosition();
         let target = {
-            x: Math.max(0, Math.min(27, rawTarget.x)),
-            y: Math.max(0, Math.min(30, rawTarget.y))
+            x: Math.max(1, Math.min(26, rawTarget.x)),
+            y: Math.max(1, Math.min(29, rawTarget.y))
         };
 
         let bestDir = validDirs[0];
@@ -396,7 +410,7 @@ class Ghost {
             case 'clyde':
                 let dist = Math.hypot(Math.floor(this.x / TILE_SIZE) - pacX, Math.floor(this.y / TILE_SIZE) - pacY);
                 if (dist > 8) return { x: pacX, y: pacY };
-                return { x: 0, y: 30 };
+                return { x: 1, y: 29 };
         }
     }
 
@@ -432,7 +446,7 @@ const ghosts = [
     new Ghost('clyde', 'orange', 15.5, 14)
 ];
 
-// Clavier Mac / PC
+// Clavier
 window.addEventListener('keydown', e => {
     switch (e.key) {
         case 'ArrowUp': pacman.nextDirX = 0; pacman.nextDirY = -1; break;
@@ -442,13 +456,12 @@ window.addEventListener('keydown', e => {
     }
 });
 
-// Touch D-Pad
+// Controls Tactiles
 document.getElementById('btn-up').addEventListener('touchstart', (e) => { e.preventDefault(); pacman.nextDirX = 0; pacman.nextDirY = -1; });
 document.getElementById('btn-down').addEventListener('touchstart', (e) => { e.preventDefault(); pacman.nextDirX = 0; pacman.nextDirY = 1; });
 document.getElementById('btn-left').addEventListener('touchstart', (e) => { e.preventDefault(); pacman.nextDirX = -1; pacman.nextDirY = 0; });
 document.getElementById('btn-right').addEventListener('touchstart', (e) => { e.preventDefault(); pacman.nextDirX = 1; pacman.nextDirY = 0; });
 
-// Swipe iOS
 let touchStartX = 0, touchStartY = 0;
 canvas.addEventListener('touchstart', e => {
     touchStartX = e.touches[0].clientX;
