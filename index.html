@@ -277,16 +277,14 @@ class Pacman {
     }
 }
 
-// CORRECTION CRITIQUE : isWalkable bloque strict les cases hors-limites (évite la fuite vers le haut)
 function isWalkable(r, c, isPacman = false) {
     if (r < 0 || r >= map.length || c < 0 || c >= map[0].length) {
-        // Seul le tunnel latéral (ligne 14) autorise le passage hors de la grille
         if (r === 14 && (c < 0 || c >= map[0].length)) return true;
         return false;
     }
     let tile = map[r][c];
     if (tile === 1) return false;
-    if ((tile === 4 || tile === 5) && isPacman) return false; // Bloquer Pac-Man hors de la cage
+    if ((tile === 4 || tile === 5) && isPacman) return false;
     return true;
 }
 
@@ -302,8 +300,8 @@ class Ghost {
     reset() {
         this.x = this.startX;
         this.y = this.startY;
-        this.dirX = Math.random() < 0.5 ? 1 : -1;
-        this.dirY = 0;
+        this.dirX = 0;
+        this.dirY = -1;
     }
 
     update() {
@@ -337,21 +335,14 @@ class Ghost {
             { x: 1, y: 0 }
         ];
 
-        // Éviter le demi-tour direct & vérifier la liberté de mouvement
         let validDirs = possibleDirs.filter(d => {
             if (d.x === -this.dirX && d.y === -this.dirY) return false;
             
-            // CORRECTION SORTIE DE CAGE :
-            // Si le fantôme est juste au-dessus de la cage (ligne 11), on lui interdit de monter vers la ligne 10.
-            // Cela l'oblige à tourner à gauche ou à droite dans le couloir !
-            if (gy === 11 && (gx >= 11 && gx <= 16) && d.y === -1) {
+            // Si le fantôme est déjà sorti au-dessus de la porte (gy <= 11), interdire de redescendre dans la cage
+            if (gy <= 11 && (gy + d.y >= 12 && gy + d.y <= 15) && (gx >= 10 && gx <= 17)) {
                 return false;
             }
 
-            let targetTile = map[gy + d.y] ? map[gy + d.y][gx + d.x] : undefined;
-            // Interdire de rentrer à nouveau dans la porte de la cage (tile 4 ou 5)
-            if ((targetTile === 4 || targetTile === 5) && gy < 12) return false;
-            
             return isWalkable(gy + d.y, gx + d.x, false);
         });
 
@@ -368,8 +359,14 @@ class Ghost {
             return;
         }
 
-        // Cible calculée et bornée dans le labyrinthe
-        let rawTarget = this.getTargetPosition();
+        // CORRECTION CLÉ : Si le fantôme est encore dans ou sous la cage (gy >= 12), sa cible est d'abord la sortie !
+        let rawTarget;
+        if (gy >= 12) {
+            rawTarget = { x: 13.5, y: 11 };
+        } else {
+            rawTarget = this.getTargetPosition();
+        }
+
         let target = {
             x: Math.max(1, Math.min(26, rawTarget.x)),
             y: Math.max(1, Math.min(29, rawTarget.y))
