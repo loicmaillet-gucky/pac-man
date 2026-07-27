@@ -277,10 +277,12 @@ class Pacman {
     }
 }
 
+// CORRECTION CLÉ 1 : Restriction stricte des tunnels hors limites
 function isWalkable(r, c, isPacman = false) {
-    if (r < 0 || r >= map.length || c < 0 || c >= map[0].length) {
-        if (r === 14 && (c < 0 || c >= map[0].length)) return true;
-        return false;
+    if (r < 0 || r >= map.length) return false;
+    if (c < 0 || c >= map[0].length) {
+        // Seule la ligne 14 (tunnel central) autorise le passage hors de la carte
+        return (r === 14);
     }
     let tile = map[r][c];
     if (tile === 1) return false;
@@ -338,7 +340,7 @@ class Ghost {
         let validDirs = possibleDirs.filter(d => {
             if (d.x === -this.dirX && d.y === -this.dirY) return false;
             
-            // Si le fantôme est déjà sorti au-dessus de la porte (gy <= 11), interdire de redescendre dans la cage
+            // Empêche de rentrer dans la cage une fois sorti
             if (gy <= 11 && (gy + d.y >= 12 && gy + d.y <= 15) && (gx >= 10 && gx <= 17)) {
                 return false;
             }
@@ -359,7 +361,7 @@ class Ghost {
             return;
         }
 
-        // CORRECTION CLÉ : Si le fantôme est encore dans ou sous la cage (gy >= 12), sa cible est d'abord la sortie !
+        // Cible pour sortir de la cage si gy >= 12
         let rawTarget;
         if (gy >= 12) {
             rawTarget = { x: 13.5, y: 11 };
@@ -367,9 +369,10 @@ class Ghost {
             rawTarget = this.getTargetPosition();
         }
 
+        // CORRECTION CLÉ 2 : Bornage propre de la cible dans la carte
         let target = {
-            x: Math.max(1, Math.min(26, rawTarget.x)),
-            y: Math.max(1, Math.min(29, rawTarget.y))
+            x: Math.max(0, Math.min(27, rawTarget.x)),
+            y: Math.max(0, Math.min(30, rawTarget.y))
         };
 
         let bestDir = validDirs[0];
