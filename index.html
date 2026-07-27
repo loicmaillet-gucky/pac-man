@@ -71,7 +71,6 @@
         #btn-down { grid-column: 2; grid-row: 2; }
         #btn-right { grid-column: 3; grid-row: 2; }
 
-        /* Masquer le D-pad tactile sur les ordinateurs */
         @media (min-width: 768px) {
             .controls {
                 display: none;
@@ -84,11 +83,11 @@
 <div id="game-container">
     <div class="header">
         <div>SCORE: <span id="score">0</span></div>
+        <div>LEVEL: <span id="level">1</span></div>
         <div>LIVES: <span id="lives">3</span></div>
     </div>
     <canvas id="canvas" width="448" height="496"></canvas>
     
-    <!-- Boutons virtuels pour iOS / Écran tactile -->
     <div class="controls">
         <div class="btn" id="btn-up">▲</div>
         <div class="btn" id="btn-left">◀</div>
@@ -102,12 +101,14 @@ const canvas = document.getElementById('canvas');
 const ctx = canvas.getContext('2d');
 const scoreEl = document.getElementById('score');
 const livesEl = document.getElementById('lives');
+const levelEl = document.getElementById('level');
 
 const TILE_SIZE = 16;
-const SPEED = 2;
+let SPEED = 2;
 
-// Labyrinthe Arcade Classic
-const map = [
+// Carte Arcade originale (31 lignes x 28 colonnes)
+// 1: Mur, 0: Dot, 2: Power Pellet, 3: Vide, 4: Porte Cage, 5: Cage Intérieur
+const initialMap = [
     [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
     [1,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1],
     [1,0,1,1,1,1,0,1,1,1,1,1,0,1,1,0,1,1,1,1,1,0,1,1,1,1,0,1],
@@ -141,9 +142,26 @@ const map = [
     [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
 ];
 
+let map = [];
+let totalDots = 0;
+let remainingDots = 0;
 let score = 0;
 let lives = 3;
+let level = 1;
 let powerTimer = 0;
+
+function cloneMap() {
+    map = JSON.parse(JSON.stringify(initialMap));
+    totalDots = 0;
+    for (let r = 0; r < map.length; r++) {
+        for (let c = 0; c < map[r].length; c++) {
+            if (map[r][c] === 0 || map[r][c] === 2) {
+                totalDots++;
+            }
+        }
+    }
+    remainingDots = totalDots;
+}
 
 class Pacman {
     constructor() {
@@ -162,10 +180,14 @@ class Pacman {
     }
 
     update() {
+        // Tente de tourner dès que possible (cornering / tolérance de virage)
         if (this.nextDirX !== 0 || this.nextDirY !== 0) {
-            if (this.canMove(this.nextDirX, this.nextDirY)) {
+            if (this.canTurn(this.nextDirX, this.nextDirY)) {
                 this.dirX = this.nextDirX;
                 this.dirY = this.nextDirY;
+                // Alignement automatique sur la grille lors des virages
+                if (this.dirX !== 0) this.y = Math.round(this.y / TILE_SIZE) * TILE_SIZE;
+                if (this.dirY !== 0) this.x = Math.round(this.x / TILE_SIZE) * TILE_SIZE;
             }
         }
 
@@ -174,44 +196,79 @@ class Pacman {
             this.y += this.dirY * SPEED;
         }
 
-        if (this.x < -TILE_SIZE / 2) this.x = canvas.width - TILE_SIZE / 2;
-        if (this.x > canvas.width - TILE_SIZE / 2) this.x = -TILE_SIZE / 2;
+        // Passage du tunnel latéral
+        if (this.x < -TILE_SIZE / 2) {
+            this.x = canvas.width - TILE_SIZE / 2;
+        } else if (this.x > canvas.width - TILE_SIZE / 2) {
+            this.x = -TILE_SIZE / 2;
+        }
 
-        let gridX = Math.floor((this.x + TILE_SIZE / 2) / TILE_SIZE);
-        let gridY = Math.floor((this.y + TILE_SIZE / 2) / TILE_SIZE);
+        // Manger les dots
+        let centerGridX = Math.floor((this.x + TILE_SIZE / 2) / TILE_SIZE);
+        let centerGridY = Math.floor((this.y + TILE_SIZE / 2) / TILE_SIZE);
 
-        if (map[gridY] && map[gridY][gridX] === 0) {
-            map[gridY][gridX] = 3;
+        if (map[centerGridY] && map[centerGridY][centerGridX] === 0) {
+            map[centerGridY][centerGridX] = 3;
             score += 10;
-        } else if (map[gridY] && map[gridY][gridX] === 2) {
-            map[gridY][gridX] = 3;
+            remainingDots--;
+        } else if (map[centerGridY] && map[centerGridY][centerGridX] === 2) {
+            map[centerGridY][centerGridX] = 3;
             score += 50;
-            powerTimer = 300;
+            remainingDots--;
+            powerTimer = 360; // ~6 secondes de mode apeuré
         }
 
         scoreEl.innerText = score;
 
+        // Bouche
         this.mouthAngle += this.mouthSpeed;
         if (this.mouthAngle > 0.4 || this.mouthAngle < 0.05) {
             this.mouthSpeed = -this.mouthSpeed;
         }
+
+        // Détection de fin de niveau
+        if (remainingDots === 0) {
+            nextLevel();
+        }
+    }
+
+    canTurn(dx, dy) {
+        let gridX = Math.round(this.x / TILE_SIZE);
+        let gridY = Math.round(this.y / TILE_SIZE);
+        
+        // Tolérance d'alignement pour tourner
+        let alignThreshold = 6;
+        let alignedX = Math.abs(this.x - gridX * TILE_SIZE) <= alignThreshold;
+        let alignedY = Math.abs(this.y - gridY * TILE_SIZE) <= alignThreshold;
+
+        if (dx !== 0 && !alignedY) return false;
+        if (dy !== 0 && !alignedX) return false;
+
+        let checkX = gridX + dx;
+        let checkY = gridY + dy;
+
+        return isWalkable(checkY, checkX, true);
     }
 
     canMove(dx, dy) {
+        if (dx === 0 && dy === 0) return false;
         let nextX = this.x + dx * SPEED;
         let nextY = this.y + dy * SPEED;
-        
+
+        // En dehors du canevas (tunnel)
+        if (nextX < 0 || nextX + TILE_SIZE > canvas.width) return true;
+
         let corners = [
-            { x: nextX + 2, y: nextY + 2 },
-            { x: nextX + TILE_SIZE - 3, y: nextY + 2 },
-            { x: nextX + 2, y: nextY + TILE_SIZE - 3 },
-            { x: nextX + TILE_SIZE - 3, y: nextY + TILE_SIZE - 3 }
+            { x: nextX, y: nextY },
+            { x: nextX + TILE_SIZE - 1, y: nextY },
+            { x: nextX, y: nextY + TILE_SIZE - 1 },
+            { x: nextX + TILE_SIZE - 1, y: nextY + TILE_SIZE - 1 }
         ];
 
         return corners.every(c => {
             let gx = Math.floor(c.x / TILE_SIZE);
             let gy = Math.floor(c.y / TILE_SIZE);
-            return map[gy] && (map[gy][gx] === 0 || map[gy][gx] === 2 || map[gy][gx] === 3);
+            return isWalkable(gy, gx, true);
         });
     }
 
@@ -227,7 +284,7 @@ class Pacman {
         ctx.arc(
             this.x + TILE_SIZE / 2, 
             this.y + TILE_SIZE / 2, 
-            TILE_SIZE / 2, 
+            TILE_SIZE / 2 - 1, 
             angle + this.mouthAngle, 
             angle + Math.PI * 2 - this.mouthAngle
         );
@@ -236,11 +293,20 @@ class Pacman {
     }
 }
 
+function isWalkable(r, c, isPacman = false) {
+    if (!map[r]) return true; // Pour la traversée du tunnel
+    let tile = map[r][c];
+    if (tile === 1) return false; // Mur
+    if (tile === 4 && isPacman) return false; // Porte réservée aux fantômes
+    return true;
+}
+
 class Ghost {
-    constructor(color, x, y) {
+    constructor(type, color, startX, startY) {
+        this.type = type; // 'blinky', 'pinky', 'inky', 'clyde'
         this.color = color;
-        this.startX = x * TILE_SIZE;
-        this.startY = y * TILE_SIZE;
+        this.startX = startX * TILE_SIZE;
+        this.startY = startY * TILE_SIZE;
         this.reset();
     }
 
@@ -252,89 +318,149 @@ class Ghost {
     }
 
     update() {
-        let dirs = [{x:1, y:0}, {x:-1, y:0}, {x:0, y:1}, {x:0, y:-1}];
-        let validDirs = dirs.filter(d => {
-            if (d.x === -this.dirX && d.y === -this.dirY) return false;
-            
-            let nextX = this.x + d.x * SPEED;
-            let nextY = this.y + d.y * SPEED;
-            let gx = Math.floor((nextX + TILE_SIZE / 2) / TILE_SIZE);
-            let gy = Math.floor((nextY + TILE_SIZE / 2) / TILE_SIZE);
-            return map[gy] && map[gy][gx] !== 1;
-        });
+        // Ralentir dans les tunnels
+        let currentGridY = Math.floor((this.y + TILE_SIZE / 2) / TILE_SIZE);
+        let inTunnel = (currentGridY === 14 && (this.x < 5 * TILE_SIZE || this.x > 22 * TILE_SIZE));
+        let ghostSpeed = powerTimer > 0 ? SPEED * 0.5 : (inTunnel ? SPEED * 0.6 : SPEED * 0.85);
 
-        if (validDirs.length > 0) {
-            if (!this.canMove(this.dirX, this.dirY) || validDirs.length > 1) {
-                let choice = validDirs[Math.floor(Math.random() * validDirs.length)];
-                this.dirX = choice.x;
-                this.dirY = choice.y;
-            }
+        // Tunnel Wrap
+        if (this.x < -TILE_SIZE / 2) this.x = canvas.width - TILE_SIZE / 2;
+        if (this.x > canvas.width - TILE_SIZE / 2) this.x = -TILE_SIZE / 2;
+
+        // Décision de direction aux intersections (alignement sur la grille)
+        let gridX = Math.round(this.x / TILE_SIZE);
+        let gridY = Math.round(this.y / TILE_SIZE);
+
+        let isCentered = Math.abs(this.x - gridX * TILE_SIZE) < ghostSpeed && Math.abs(this.y - gridY * TILE_SIZE) < ghostSpeed;
+
+        if (isCentered) {
+            this.x = gridX * TILE_SIZE;
+            this.y = gridY * TILE_SIZE;
+            this.chooseNextDirection(gridX, gridY);
         }
 
-        this.x += this.dirX * (powerTimer > 0 ? SPEED / 2 : SPEED);
-        this.y += this.dirY * (powerTimer > 0 ? SPEED / 2 : SPEED);
+        this.x += this.dirX * ghostSpeed;
+        this.y += this.dirY * ghostSpeed;
     }
 
-    canMove(dx, dy) {
-        let gx = Math.floor((this.x + dx * SPEED + TILE_SIZE / 2) / TILE_SIZE);
-        let gy = Math.floor((this.y + dy * SPEED + TILE_SIZE / 2) / TILE_SIZE);
-        return map[gy] && map[gy][gx] !== 1;
+    chooseNextDirection(gx, gy) {
+        let possibleDirs = [
+            { x: 0, y: -1 },
+            { x: -1, y: 0 },
+            { x: 0, y: 1 },
+            { x: 1, y: 0 }
+        ];
+
+        // Éliminer le demi-tour direct
+        let validDirs = possibleDirs.filter(d => !(d.x === -this.dirX && d.y === -this.dirY) && isWalkable(gy + d.y, gx + d.x, false));
+
+        if (validDirs.length === 0) {
+            this.dirX = -this.dirX;
+            this.dirY = -this.dirY;
+            return;
+        }
+
+        if (powerTimer > 0) {
+            // Fuite aléatoire en mode apeuré
+            let choice = validDirs[Math.floor(Math.random() * validDirs.length)];
+            this.dirX = choice.x;
+            this.dirY = choice.y;
+            return;
+        }
+
+        // IA ciblant la position selon le fantôme
+        let target = this.getTargetPosition();
+
+        let bestDir = validDirs[0];
+        let minDistance = Infinity;
+
+        validDirs.forEach(d => {
+            let nextTileX = gx + d.x;
+            let nextTileY = gy + d.y;
+            let dist = Math.hypot(nextTileX - target.x, nextTileY - target.y);
+            if (dist < minDistance) {
+                minDistance = dist;
+                bestDir = d;
+            }
+        });
+
+        this.dirX = bestDir.x;
+        this.dirY = bestDir.y;
+    }
+
+    getTargetPosition() {
+        let pacX = Math.floor(pacman.x / TILE_SIZE);
+        let pacY = Math.floor(pacman.y / TILE_SIZE);
+
+        switch (this.type) {
+            case 'blinky': // Attaque directe
+                return { x: pacX, y: pacY };
+            case 'pinky': // Anticipation (4 cases devant Pac-Man)
+                return { x: pacX + pacman.dirX * 4, y: pacY + pacman.dirY * 4 };
+            case 'inky': // Prise en tenaille avec Blinky
+                let bX = Math.floor(ghosts[0].x / TILE_SIZE);
+                let bY = Math.floor(ghosts[0].y / TILE_SIZE);
+                let vecX = (pacX + pacman.dirX * 2) - bX;
+                let vecY = (pacY + pacman.dirY * 2) - bY;
+                return { x: bX + vecX * 2, y: bY + vecY * 2 };
+            case 'clyde': // Chasseur si loin, fuyard si proche (< 8 cases)
+                let dist = Math.hypot(Math.floor(this.x / TILE_SIZE) - pacX, Math.floor(this.y / TILE_SIZE) - pacY);
+                if (dist > 8) return { x: pacX, y: pacY };
+                return { x: 0, y: 31 }; // Coin inférieur gauche
+        }
     }
 
     draw() {
-        ctx.fillStyle = powerTimer > 0 ? 'blue' : this.color;
+        ctx.fillStyle = powerTimer > 0 ? (powerTimer < 120 && Math.floor(powerTimer / 15) % 2 === 0 ? 'white' : 'blue') : this.color;
         ctx.beginPath();
-        ctx.arc(this.x + TILE_SIZE / 2, this.y + TILE_SIZE / 2 - 2, TILE_SIZE / 2, Math.PI, 0, false);
-        ctx.lineTo(this.x + TILE_SIZE, this.y + TILE_SIZE);
-        ctx.lineTo(this.x, this.y + TILE_SIZE);
+        ctx.arc(this.x + TILE_SIZE / 2, this.y + TILE_SIZE / 2 - 2, TILE_SIZE / 2 - 1, Math.PI, 0, false);
+        ctx.lineTo(this.x + TILE_SIZE - 1, this.y + TILE_SIZE);
+        ctx.lineTo(this.x + 1, this.y + TILE_SIZE);
         ctx.fill();
 
-        ctx.fillStyle = 'white';
-        ctx.beginPath();
-        ctx.arc(this.x + 4, this.y + 6, 3, 0, Math.PI * 2);
-        ctx.arc(this.x + 12, this.y + 6, 3, 0, Math.PI * 2);
-        ctx.fill();
+        // Yeux
+        if (powerTimer === 0) {
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(this.x + 4, this.y + 5, 2.5, 0, Math.PI * 2);
+            ctx.arc(this.x + 11, this.y + 5, 2.5, 0, Math.PI * 2);
+            ctx.fill();
 
-        ctx.fillStyle = 'black';
-        ctx.beginPath();
-        ctx.arc(this.x + 4 + this.dirX, this.y + 6 + this.dirY, 1.5, 0, Math.PI * 2);
-        ctx.arc(this.x + 12 + this.dirX, this.y + 6 + this.dirY, 1.5, 0, Math.PI * 2);
-        ctx.fill();
+            ctx.fillStyle = 'blue';
+            ctx.beginPath();
+            ctx.arc(this.x + 4 + this.dirX, this.y + 5 + this.dirY, 1.2, 0, Math.PI * 2);
+            ctx.arc(this.x + 11 + this.dirX, this.y + 5 + this.dirY, 1.2, 0, Math.PI * 2);
+            ctx.fill();
+        }
     }
 }
 
 const pacman = new Pacman();
 const ghosts = [
-    new Ghost('red', 13.5, 11),
-    new Ghost('pink', 13.5, 14),
-    new Ghost('cyan', 11.5, 14),
-    new Ghost('orange', 15.5, 14)
+    new Ghost('blinky', 'red', 13.5, 11),
+    new Ghost('pinky', 'pink', 13.5, 14),
+    new Ghost('inky', 'cyan', 11.5, 14),
+    new Ghost('clyde', 'orange', 15.5, 14)
 ];
 
-// 1. CONTRÔLES CLAVIER (Mac / Ordinateur) : Touches Fléchées Exclusives
+// Contrôles Flèches (Mac/PC)
 window.addEventListener('keydown', e => {
     switch (e.key) {
-        case 'ArrowUp':
-            pacman.nextDirX = 0; pacman.nextDirY = -1; break;
-        case 'ArrowDown':
-            pacman.nextDirX = 0; pacman.nextDirY = 1; break;
-        case 'ArrowLeft':
-            pacman.nextDirX = -1; pacman.nextDirY = 0; break;
-        case 'ArrowRight':
-            pacman.nextDirX = 1; pacman.nextDirY = 0; break;
+        case 'ArrowUp': pacman.nextDirX = 0; pacman.nextDirY = -1; break;
+        case 'ArrowDown': pacman.nextDirX = 0; pacman.nextDirY = 1; break;
+        case 'ArrowLeft': pacman.nextDirX = -1; pacman.nextDirY = 0; break;
+        case 'ArrowRight': pacman.nextDirX = 1; pacman.nextDirY = 0; break;
     }
 });
 
-// 2. CONTRÔLES TACTILES (iOS / iPhone) - Option A: Boutons D-Pad
+// Contrôles Tactiles (D-Pad iOS)
 document.getElementById('btn-up').addEventListener('touchstart', (e) => { e.preventDefault(); pacman.nextDirX = 0; pacman.nextDirY = -1; });
 document.getElementById('btn-down').addEventListener('touchstart', (e) => { e.preventDefault(); pacman.nextDirX = 0; pacman.nextDirY = 1; });
 document.getElementById('btn-left').addEventListener('touchstart', (e) => { e.preventDefault(); pacman.nextDirX = -1; pacman.nextDirY = 0; });
 document.getElementById('btn-right').addEventListener('touchstart', (e) => { e.preventDefault(); pacman.nextDirX = 1; pacman.nextDirY = 0; });
 
-// 3. CONTRÔLES TACTILES (iOS / iPhone) - Option B: Gestes de Swipe
-let touchStartX = 0;
-let touchStartY = 0;
-
+// Contrôles Swipe iOS
+let touchStartX = 0, touchStartY = 0;
 canvas.addEventListener('touchstart', e => {
     touchStartX = e.touches[0].clientX;
     touchStartY = e.touches[0].clientY;
@@ -343,13 +469,12 @@ canvas.addEventListener('touchstart', e => {
 canvas.addEventListener('touchend', e => {
     let diffX = e.changedTouches[0].clientX - touchStartX;
     let diffY = e.changedTouches[0].clientY - touchStartY;
-
     if (Math.abs(diffX) > Math.abs(diffY)) {
-        if (diffX > 30) { pacman.nextDirX = 1; pacman.nextDirY = 0; }
-        else if (diffX < -30) { pacman.nextDirX = -1; pacman.nextDirY = 0; }
+        if (diffX > 25) { pacman.nextDirX = 1; pacman.nextDirY = 0; }
+        else if (diffX < -25) { pacman.nextDirX = -1; pacman.nextDirY = 0; }
     } else {
-        if (diffY > 30) { pacman.nextDirX = 0; pacman.nextDirY = 1; }
-        else if (diffY < -30) { pacman.nextDirX = 0; pacman.nextDirY = -1; }
+        if (diffY > 25) { pacman.nextDirX = 0; pacman.nextDirY = 1; }
+        else if (diffY < -25) { pacman.nextDirX = 0; pacman.nextDirY = -1; }
     }
 }, false);
 
@@ -380,7 +505,7 @@ function drawMap() {
 function checkCollisions() {
     ghosts.forEach(ghost => {
         let dist = Math.hypot((pacman.x + TILE_SIZE / 2) - (ghost.x + TILE_SIZE / 2), (pacman.y + TILE_SIZE / 2) - (ghost.y + TILE_SIZE / 2));
-        if (dist < TILE_SIZE / 1.2) {
+        if (dist < TILE_SIZE / 1.3) {
             if (powerTimer > 0) {
                 ghost.reset();
                 score += 200;
@@ -389,7 +514,7 @@ function checkCollisions() {
                 livesEl.innerText = lives;
                 if (lives <= 0) {
                     alert('GAME OVER! Score final : ' + score);
-                    document.location.reload();
+                    resetGame();
                 } else {
                     pacman.reset();
                     ghosts.forEach(g => g.reset());
@@ -397,6 +522,28 @@ function checkCollisions() {
             }
         }
     });
+}
+
+function nextLevel() {
+    level++;
+    levelEl.innerText = level;
+    SPEED = Math.min(3, 2 + level * 0.1); // Accélération modérée
+    cloneMap();
+    pacman.reset();
+    ghosts.forEach(g => g.reset());
+}
+
+function resetGame() {
+    score = 0;
+    lives = 3;
+    level = 1;
+    SPEED = 2;
+    scoreEl.innerText = score;
+    livesEl.innerText = lives;
+    levelEl.innerText = level;
+    cloneMap();
+    pacman.reset();
+    ghosts.forEach(g => g.reset());
 }
 
 function gameLoop() {
@@ -416,6 +563,8 @@ function gameLoop() {
     requestAnimationFrame(gameLoop);
 }
 
+// Initialisation
+cloneMap();
 gameLoop();
 </script>
 </body>
