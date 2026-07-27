@@ -101,8 +101,9 @@ const levelEl = document.getElementById('level');
 
 const TILE_SIZE = 16;
 const PACMAN_SPEED = 2;
-const GHOST_SPEED = 1.6; // Vitesse des fantômes à 80%
+const GHOST_SPEED = 1.6;
 
+// 0: Pac-dot, 1: Wall, 2: Power Pellet, 3: Empty, 4: Ghost Door
 const initialMap = [
     [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
     [1,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1],
@@ -113,17 +114,17 @@ const initialMap = [
     [1,0,1,1,1,1,0,1,1,0,1,1,1,1,1,1,1,1,0,1,1,0,1,1,1,1,0,1],
     [1,0,1,1,1,1,0,1,1,0,1,1,1,1,1,1,1,1,0,1,1,0,1,1,1,1,0,1],
     [1,0,0,0,0,0,0,1,1,0,0,0,0,1,1,0,0,0,0,1,1,0,0,0,0,0,0,1],
-    [1,1,1,1,1,1,0,1,1,1,1,1,3,1,1,3,1,1,1,1,1,0,1,1,1,1,1,1],
-    [3,3,3,3,3,1,0,1,1,1,1,1,3,1,1,3,1,1,1,1,1,0,1,3,3,3,3,3],
-    [3,3,3,3,3,1,0,1,1,3,3,3,3,3,3,3,3,3,3,1,1,0,1,3,3,3,3,3],
-    [3,3,3,3,3,1,0,1,1,3,1,1,1,4,4,1,1,1,3,1,1,0,1,3,3,3,3,3],
-    [1,1,1,1,1,1,0,1,1,3,1,3,3,3,3,3,3,1,3,1,1,0,1,1,1,1,1,1],
-    [3,3,3,3,3,3,0,3,3,3,1,3,3,3,3,3,3,1,3,3,3,0,3,3,3,3,3,3],
-    [1,1,1,1,1,1,0,1,1,3,1,3,3,3,3,3,3,1,3,1,1,0,1,1,1,1,1,1],
-    [3,3,3,3,3,1,0,1,1,3,1,1,1,1,1,1,1,1,3,1,1,0,1,3,3,3,3,3],
-    [3,3,3,3,3,1,0,1,1,3,3,3,3,3,3,3,3,3,3,1,1,0,1,3,3,3,3,3],
-    [3,3,3,3,3,1,0,1,1,3,1,1,1,1,1,1,1,1,3,1,1,0,1,3,3,3,3,3],
-    [1,1,1,1,1,1,0,1,1,3,1,1,1,1,1,1,1,1,3,1,1,0,1,1,1,1,1,1],
+    [1,1,1,1,1,1,0,1,1,1,1,1,0,1,1,0,1,1,1,1,1,0,1,1,1,1,1,1],
+    [3,3,3,3,3,1,0,1,1,1,1,1,0,1,1,0,1,1,1,1,1,0,1,3,3,3,3,3],
+    [3,3,3,3,3,1,0,1,1,0,0,0,0,3,3,0,0,0,0,1,1,0,1,3,3,3,3,3],
+    [3,3,3,3,3,1,0,1,1,0,1,1,1,4,4,1,1,1,0,1,1,0,1,3,3,3,3,3],
+    [1,1,1,1,1,1,0,1,1,0,1,3,3,3,3,3,3,1,0,1,1,0,1,1,1,1,1,1],
+    [3,3,3,3,3,3,0,3,3,0,1,3,3,3,3,3,3,1,0,3,3,0,3,3,3,3,3,3],
+    [1,1,1,1,1,1,0,1,1,0,1,3,3,3,3,3,3,1,0,1,1,0,1,1,1,1,1,1],
+    [3,3,3,3,3,1,0,1,1,0,1,1,1,1,1,1,1,1,0,1,1,0,1,3,3,3,3,3],
+    [3,3,3,3,3,1,0,1,1,0,0,0,0,0,0,0,0,0,0,1,1,0,1,3,3,3,3,3],
+    [3,3,3,3,3,1,0,1,1,0,1,1,1,1,1,1,1,1,0,1,1,0,1,3,3,3,3,3],
+    [1,1,1,1,1,1,0,1,1,0,1,1,1,1,1,1,1,1,0,1,1,0,1,1,1,1,1,1],
     [1,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1],
     [1,0,1,1,1,1,0,1,1,1,1,1,0,1,1,0,1,1,1,1,1,0,1,1,1,1,0,1],
     [1,0,1,1,1,1,0,1,1,1,1,1,0,1,1,0,1,1,1,1,1,0,1,1,1,1,0,1],
@@ -285,14 +286,12 @@ class Ghost {
             let targetX = 13 * TILE_SIZE;
             let targetY = 11 * TILE_SIZE;
 
-            // Alignement horizontal vers le centre de la porte
             if (Math.abs(this.x - targetX) > speed) {
                 this.x += (this.x < targetX ? speed : -speed);
             } else if (Math.abs(this.y - targetY) > speed) {
                 this.x = targetX;
                 this.y -= speed;
             } else {
-                // Verrouillage strict sur la grille à la sortie
                 this.x = targetX;
                 this.y = targetY;
                 this.state = 'OUTSIDE';
@@ -302,10 +301,9 @@ class Ghost {
             return;
         }
 
-        // Alignement et prise de décision sur la grille
         let gridX = Math.round(this.x / TILE_SIZE);
         let gridY = Math.round(this.y / TILE_SIZE);
-        
+
         let diffX = Math.abs(this.x - gridX * TILE_SIZE);
         let diffY = Math.abs(this.y - gridY * TILE_SIZE);
 
@@ -331,15 +329,12 @@ class Ghost {
         ];
 
         let validDirs = possibleDirs.filter(d => {
-            // Empêche le demi-tour direct
             if (d.x === -this.dirX && d.y === -this.dirY) return false;
-            // Empêche de re-rentrer dans la cage par le haut
             if (gy === 11 && d.y === 1 && (gx === 13 || gx === 14)) return false;
             return isTileWalkable(gy + d.y, gx + d.x);
         });
 
         if (validDirs.length === 0) {
-            // Sécurité : si bloqué, fait demi-tour
             this.dirX = -this.dirX;
             this.dirY = -this.dirY;
             return;
@@ -416,7 +411,6 @@ const ghosts = [
     new Ghost('clyde', 'orange', 15, 14, 300)
 ];
 
-// Clavier
 window.addEventListener('keydown', e => {
     switch (e.key) {
         case 'ArrowUp': pacman.nextDirX = 0; pacman.nextDirY = -1; break;
@@ -426,7 +420,6 @@ window.addEventListener('keydown', e => {
     }
 });
 
-// Controls Tactiles
 document.getElementById('btn-up').addEventListener('touchstart', (e) => { e.preventDefault(); pacman.nextDirX = 0; pacman.nextDirY = -1; });
 document.getElementById('btn-down').addEventListener('touchstart', (e) => { e.preventDefault(); pacman.nextDirX = 0; pacman.nextDirY = 1; });
 document.getElementById('btn-left').addEventListener('touchstart', (e) => { e.preventDefault(); pacman.nextDirX = -1; pacman.nextDirY = 0; });
