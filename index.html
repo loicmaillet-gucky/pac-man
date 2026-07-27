@@ -169,7 +169,7 @@ class Pacman {
     }
 
     reset() {
-        this.x = 13.5 * TILE_SIZE;
+        this.x = 13 * TILE_SIZE;
         this.y = 23 * TILE_SIZE;
         this.dirX = 0;
         this.dirY = 0;
@@ -277,11 +277,9 @@ class Pacman {
     }
 }
 
-// CORRECTION CLÉ 1 : Restriction stricte des tunnels hors limites
 function isWalkable(r, c, isPacman = false) {
     if (r < 0 || r >= map.length) return false;
     if (c < 0 || c >= map[0].length) {
-        // Seule la ligne 14 (tunnel central) autorise le passage hors de la carte
         return (r === 14);
     }
     let tile = map[r][c];
@@ -340,7 +338,7 @@ class Ghost {
         let validDirs = possibleDirs.filter(d => {
             if (d.x === -this.dirX && d.y === -this.dirY) return false;
             
-            // Empêche de rentrer dans la cage une fois sorti
+            // Empêche de re-rentrer dans la cage une fois sorti
             if (gy <= 11 && (gy + d.y >= 12 && gy + d.y <= 15) && (gx >= 10 && gx <= 17)) {
                 return false;
             }
@@ -361,15 +359,14 @@ class Ghost {
             return;
         }
 
-        // Cible pour sortir de la cage si gy >= 12
+        // Cible prioritaire : sortir de la cage si gy >= 12
         let rawTarget;
         if (gy >= 12) {
-            rawTarget = { x: 13.5, y: 11 };
+            rawTarget = { x: 13, y: 11 };
         } else {
             rawTarget = this.getTargetPosition();
         }
 
-        // CORRECTION CLÉ 2 : Bornage propre de la cible dans la carte
         let target = {
             x: Math.max(0, Math.min(27, rawTarget.x)),
             y: Math.max(0, Math.min(30, rawTarget.y))
@@ -438,12 +435,13 @@ class Ghost {
     }
 }
 
+// CORRECTION CLÉ : Positions de départ alignées sur des cases entières !
 const pacman = new Pacman();
 const ghosts = [
-    new Ghost('blinky', 'red', 13.5, 11),
-    new Ghost('pinky', 'pink', 13.5, 14),
-    new Ghost('inky', 'cyan', 11.5, 14),
-    new Ghost('clyde', 'orange', 15.5, 14)
+    new Ghost('blinky', 'red', 13, 11),
+    new Ghost('pinky', 'pink', 13, 14),
+    new Ghost('inky', 'cyan', 11, 14),
+    new Ghost('clyde', 'orange', 15, 14)
 ];
 
 // Clavier
