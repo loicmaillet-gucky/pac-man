@@ -101,9 +101,8 @@ const levelEl = document.getElementById('level');
 
 const TILE_SIZE = 16;
 const PACMAN_SPEED = 2;
-const GHOST_SPEED = 1.6; // Vitesse réduite de 20% (anciennement 2)
+const GHOST_SPEED = 1.6; // Vitesse des fantômes à 80%
 
-// Carte Arcade (31 lignes x 28 colonnes)
 const initialMap = [
     [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
     [1,0,0,0,0,0,0,0,0,0,0,0,0,1,1,0,0,0,0,0,0,0,0,0,0,0,0,1],
@@ -283,13 +282,14 @@ class Ghost {
         }
 
         if (this.state === 'EXITING') {
-            let targetX = 13 * TILE_SIZE;
+            let targetX = 13.5 * TILE_SIZE - TILE_SIZE / 2;
             let targetY = 11 * TILE_SIZE;
 
-            if (Math.abs(this.x - targetX) > 0.5) {
-                this.x += (this.x < targetX ? 1 : -1);
-            } else if (Math.abs(this.y - targetY) > 0.5) {
-                this.y -= 1;
+            if (Math.abs(this.x - targetX) > speed) {
+                this.x += (this.x < targetX ? speed : -speed);
+            } else if (Math.abs(this.y - targetY) > speed) {
+                this.x = targetX;
+                this.y -= speed;
             } else {
                 this.x = targetX;
                 this.y = targetY;
@@ -300,13 +300,13 @@ class Ghost {
             return;
         }
 
-        // Alignement et prise de décision sur la grille avec tolérance
         let gridX = Math.round(this.x / TILE_SIZE);
         let gridY = Math.round(this.y / TILE_SIZE);
-        let nearCenterX = Math.abs(this.x - gridX * TILE_SIZE) < speed;
-        let nearCenterY = Math.abs(this.y - gridY * TILE_SIZE) < speed;
+        
+        let diffX = Math.abs(this.x - gridX * TILE_SIZE);
+        let diffY = Math.abs(this.y - gridY * TILE_SIZE);
 
-        if (nearCenterX && nearCenterY) {
+        if (diffX <= speed && diffY <= speed) {
             this.x = gridX * TILE_SIZE;
             this.y = gridY * TILE_SIZE;
             this.chooseNextDirection(gridX, gridY);
