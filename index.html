@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Pac-Man - iPhone 15 Pro</title>
+  <title>Pac-Man - iOS Fluid</title>
   <style>
     * {
       box-sizing: border-box;
@@ -86,6 +86,13 @@
       height: 180px;
     }
 
+    /* Masquage du D-Pad spécifiquement sur iOS (iPhone / iPad / Safari iOS) */
+    @supports (-webkit-touch-callout: none) {
+      .controls {
+        display: none !important;
+      }
+    }
+
     .d-btn {
       background: #222;
       border: 1px solid #444;
@@ -97,7 +104,6 @@
       justify-content: center;
       touch-action: manipulation;
       transition: background 0.1s, transform 0.05s;
-      -webkit-tap-highlight-color: transparent;
     }
 
     .d-btn:active, .d-btn.active {
@@ -111,13 +117,6 @@
     .btn-center{ grid-column: 2; grid-row: 2; background: #181818; border-color: #333; }
     .btn-right { grid-column: 3; grid-row: 2; }
     .btn-down  { grid-column: 2; grid-row: 3; }
-
-    @media (max-height: 667px) {
-      .d-pad {
-        width: 140px;
-        height: 140px;
-      }
-    }
   </style>
 </head>
 <body>
@@ -149,7 +148,6 @@
     const rows = 21;
     const cols = 19;
 
-    // 1: Mur, 0: Pac-Gum, 2: Vide, 3: Super Pac-Gum
     const originalMap = [
       [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
       [1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1],
@@ -176,8 +174,10 @@
 
     let map = JSON.parse(JSON.stringify(originalMap));
     let score = 0;
-    let gameLoopId = null;
     let frightenTimer = null;
+
+    // Déplacement fluide en sous-pixels
+    const speed = 0.08; 
 
     let pacman = {
       x: 9, y: 16,
@@ -187,10 +187,10 @@
     };
 
     let ghosts = [
-      { x: 9, y: 8, dx: 1, dy: 0, color: '#ff0000', isFrightened: false }, // Blinky
-      { x: 9, y: 9, dx: -1, dy: 0, color: '#ffb8ff', isFrightened: false }, // Pinky
-      { x: 8, y: 9, dx: 0, dy: -1, color: '#00ffff', isFrightened: false }, // Inky
-      { x: 10, y: 9, dx: 0, dy: 1, color: '#ffb852', isFrightened: false }  // Clyde
+      { x: 9, y: 8, dx: 1, dy: 0, color: '#ff0000', isFrightened: false },
+      { x: 9, y: 9, dx: -1, dy: 0, color: '#ffb8ff', isFrightened: false },
+      { x: 8, y: 9, dx: 0, dy: -1, color: '#00ffff', isFrightened: false },
+      { x: 10, y: 9, dx: 0, dy: 1, color: '#ffb852', isFrightened: false }
     ];
 
     function setDirection(dx, dy) {
@@ -198,45 +198,63 @@
       pacman.nextDy = dy;
     }
 
-    function canMove(x, y, dx, dy) {
-      let nextX = x + dx;
-      let nextY = y + dy;
-
-      // Tunnel wrapping
-      if (nextX < 0 || nextX >= cols) return true;
-      if (nextY < 0 || nextY >= rows) return true;
-
-      return map[nextY][nextX] !== 1;
+    function isWall(x, y) {
+      let gridX = Math.floor(x);
+      let gridY = Math.floor(y);
+      if (gridX < 0 || gridX >= cols || gridY < 0 || gridY >= rows) return false;
+      return map[gridY][gridX] === 1;
     }
 
     function update() {
-      // Tenter de tourner si la prochaine direction voulue est valide
-      if (canMove(pacman.x, pacman.y, pacman.nextDx, pacman.nextDy)) {
-        pacman.dx = pacman.nextDx;
-        pacman.dy = pacman.nextDy;
+      // Alignement aux cases pour changer de direction proprement
+      let isCenteredX = Math.abs(pacman.x - Math.round(pacman.x)) < 0.05;
+      let isCenteredY = Math.abs(pacman.y - Math.round(pacman.y)) < 0.05;
+
+      if (isCenteredX && isCenteredY) {
+        let currentGridX = Math.round(pacman.x);
+        let currentGridY = Math.round(pacman.y);
+
+        if (!isWall(currentGridX + pacman.nextDx, currentGridY + pacman.nextDy)) {
+          pacman.dx = pacman.nextDx;
+          pacman.dy = pacman.nextDy;
+          pacman.x = currentGridX;
+          pacman.y = currentGridY;
+        }
       }
 
-      // Avancer Pac-Man
-      if (canMove(pacman.x, pacman.y, pacman.dx, pacman.dy)) {
-        pacman.x += pacman.dx;
-        pacman.y += pacman.dy;
+      // Avancement Pac-Man
+      let nextX = pacman.x + pacman.dx * speed;
+      let nextY = pacman.y + pacman.dy * speed;
 
-        // Tunnel
-        if (pacman.x < 0) pacman.x = cols - 1;
-        else if (pacman.x >= cols) pacman.x = 0;
+      let targetGridX = pacman.dx > 0 ? Math.ceil(nextX) : Math.floor(nextX);
+      let targetGridY = pacman.dy > 0 ? Math.ceil(nextY) : Math.floor(nextY);
+
+      if (!isWall(targetGridX, targetGridY)) {
+        pacman.x = nextX;
+        pacman.y = nextY;
+      } else {
+        pacman.x = Math.round(pacman.x);
+        pacman.y = Math.round(pacman.y);
       }
+
+      // Tunnel
+      if (pacman.x < -0.5) pacman.x = cols - 0.5;
+      else if (pacman.x >= cols - 0.5) pacman.x = -0.5;
 
       // Manger Pac-Gum
-      let currentTile = map[pacman.y][pacman.x];
-      if (currentTile === 0) {
-        map[pacman.y][pacman.x] = 2;
-        score += 10;
-        scoreEl.textContent = score;
-      } else if (currentTile === 3) {
-        map[pacman.y][pacman.x] = 2;
-        score += 50;
-        scoreEl.textContent = score;
-        triggerFrightenedMode();
+      let gridX = Math.round(pacman.x);
+      let gridY = Math.round(pacman.y);
+      if (gridX >= 0 && gridX < cols && gridY >= 0 && gridY < rows) {
+        if (map[gridY][gridX] === 0) {
+          map[gridY][gridX] = 2;
+          score += 10;
+          scoreEl.textContent = score;
+        } else if (map[gridY][gridX] === 3) {
+          map[gridY][gridX] = 2;
+          score += 50;
+          scoreEl.textContent = score;
+          triggerFrightenedMode();
+        }
       }
 
       // Animation bouche
@@ -245,29 +263,40 @@
         pacman.mouthSpeed = -pacman.mouthSpeed;
       }
 
-      // Déplacer les fantômes
+      // Déplacement Fantômes
       ghosts.forEach(ghost => {
-        let possibleDirs = [
-          { dx: 0, dy: -1 },
-          { dx: 0, dy: 1 },
-          { dx: -1, dy: 0 },
-          { dx: 1, dy: 0 }
-        ].filter(d => !(d.dx === -ghost.dx && d.dy === -ghost.dy) && canMove(ghost.x, ghost.y, d.dx, d.dy));
+        let gIsCenteredX = Math.abs(ghost.x - Math.round(ghost.x)) < 0.05;
+        let gIsCenteredY = Math.abs(ghost.y - Math.round(ghost.y)) < 0.05;
 
-        if (possibleDirs.length > 0) {
-          let choice = possibleDirs[Math.floor(Math.random() * possibleDirs.length)];
-          ghost.dx = choice.dx;
-          ghost.dy = choice.dy;
+        if (gIsCenteredX && gIsCenteredY) {
+          let gGridX = Math.round(ghost.x);
+          let gGridY = Math.round(ghost.y);
+
+          let possibleDirs = [
+            { dx: 0, dy: -1 },
+            { dx: 0, dy: 1 },
+            { dx: -1, dy: 0 },
+            { dx: 1, dy: 0 }
+          ].filter(d => !(d.dx === -ghost.dx && d.dy === -ghost.dy) && !isWall(gGridX + d.dx, gGridY + d.dy));
+
+          if (possibleDirs.length > 0) {
+            let choice = possibleDirs[Math.floor(Math.random() * possibleDirs.length)];
+            ghost.dx = choice.dx;
+            ghost.dy = choice.dy;
+            ghost.x = gGridX;
+            ghost.y = gGridY;
+          }
         }
 
-        ghost.x += ghost.dx;
-        ghost.y += ghost.dy;
+        ghost.x += ghost.dx * (speed * 0.85);
+        ghost.y += ghost.dy * (speed * 0.85);
 
-        if (ghost.x < 0) ghost.x = cols - 1;
-        else if (ghost.x >= cols) ghost.x = 0;
+        if (ghost.x < -0.5) ghost.x = cols - 0.5;
+        else if (ghost.x >= cols - 0.5) ghost.x = -0.5;
 
-        // Collision avec Pac-Man
-        if (ghost.x === pacman.x && ghost.y === pacman.y) {
+        // Collision
+        let dist = Math.hypot(ghost.x - pacman.x, ghost.y - pacman.y);
+        if (dist < 0.6) {
           if (ghost.isFrightened) {
             score += 200;
             scoreEl.textContent = score;
@@ -292,7 +321,6 @@
     function draw() {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Dessiner Labyrinthe
       for (let r = 0; r < rows; r++) {
         for (let c = 0; c < cols; c++) {
           if (map[r][c] === 1) {
@@ -312,7 +340,7 @@
         }
       }
 
-      // Dessiner Pac-Man
+      // Pac-Man
       let angle = 0;
       if (pacman.dx === 1) angle = 0;
       if (pacman.dx === -1) angle = Math.PI;
@@ -331,7 +359,7 @@
       ctx.lineTo(pacman.x * tileSize + tileSize / 2, pacman.y * tileSize + tileSize / 2);
       ctx.fill();
 
-      // Dessiner Fantômes
+      // Fantômes
       ghosts.forEach(ghost => {
         ctx.fillStyle = ghost.isFrightened ? '#0000ff' : ghost.color;
         let gx = ghost.x * tileSize + tileSize / 2;
@@ -343,7 +371,6 @@
         ctx.lineTo(gx - tileSize / 2 + 2, gy + tileSize / 2);
         ctx.fill();
 
-        // Yeux
         ctx.fillStyle = '#fff';
         ctx.beginPath();
         ctx.arc(gx - 3, gy - 3, 2, 0, Math.PI * 2);
@@ -365,30 +392,38 @@
       pacman.nextDy = 0;
     }
 
-    function gameStep() {
+    // Boucle d'animation fluide 60 FPS
+    function gameLoop() {
       update();
       draw();
+      requestAnimationFrame(gameLoop);
     }
 
-    // --- CONTRÔLES TACTILES & CLAVIER ---
+    // --- CONTROLES TACTILES (SWIPE POUR IOS) ---
+    let touchStartX = 0;
+    let touchStartY = 0;
+
+    window.addEventListener('touchstart', (e) => {
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+    }, { passive: false });
+
+    window.addEventListener('touchend', (e) => {
+      let dx = e.changedTouches[0].clientX - touchStartX;
+      let dy = e.changedTouches[0].clientY - touchStartY;
+
+      if (Math.abs(dx) > Math.abs(dy)) {
+        if (Math.abs(dx) > 20) setDirection(dx > 0 ? 1 : -1, 0);
+      } else {
+        if (Math.abs(dy) > 20) setDirection(0, dy > 0 ? 1 : -1);
+      }
+    }, { passive: false });
+
+    // --- CONTROLES CLAVIER & D-PAD (NON-IOS) ---
     function bindTouchControl(buttonId, action) {
       const btn = document.getElementById(buttonId);
-
-      const handlePress = (e) => {
-        e.preventDefault();
-        action();
-        btn.classList.add('active');
-      };
-
-      const handleRelease = (e) => {
-        e.preventDefault();
-        btn.classList.remove('active');
-      };
-
-      btn.addEventListener('touchstart', handlePress, { passive: false });
-      btn.addEventListener('touchend', handleRelease, { passive: false });
-      btn.addEventListener('mousedown', handlePress);
-      btn.addEventListener('mouseup', handleRelease);
+      if (!btn) return;
+      btn.addEventListener('click', action);
     }
 
     bindTouchControl('btn-up', () => setDirection(0, -1));
@@ -397,23 +432,13 @@
     bindTouchControl('btn-right', () => setDirection(1, 0));
 
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'ArrowUp') { setDirection(0, -1); highlightDpad('btn-up'); }
-      if (e.key === 'ArrowDown') { setDirection(0, 1); highlightDpad('btn-down'); }
-      if (e.key === 'ArrowLeft') { setDirection(-1, 0); highlightDpad('btn-left'); }
-      if (e.key === 'ArrowRight') { setDirection(1, 0); highlightDpad('btn-right'); }
+      if (e.key === 'ArrowUp') setDirection(0, -1);
+      if (e.key === 'ArrowDown') setDirection(0, 1);
+      if (e.key === 'ArrowLeft') setDirection(-1, 0);
+      if (e.key === 'ArrowRight') setDirection(1, 0);
     });
 
-    window.addEventListener('keyup', () => {
-      document.querySelectorAll('.d-btn').forEach(btn => btn.classList.remove('active'));
-    });
-
-    function highlightDpad(id) {
-      const btn = document.getElementById(id);
-      if (btn) btn.classList.add('active');
-    }
-
-    // Lancement de la boucle de jeu (~4 images/sec pour vitesse fluide Pac-Man)
-    setInterval(gameStep, 200);
+    requestAnimationFrame(gameLoop);
   </script>
 </body>
 </html>
