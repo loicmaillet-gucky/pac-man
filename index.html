@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Pac-Man - Fixes Final</title>
+  <title>Pac-Man - Fix Tunnel & Clavier Desktop</title>
   <style>
     * {
       box-sizing: border-box;
@@ -75,9 +75,11 @@
       padding-top: 5px;
     }
 
-    /* Masqué sur PC/Mac via JavaScript */
-    .controls.hide-desktop {
-      display: none !important;
+    /* Cacher le pavé tactile sur tous les écrans avec pointeur précis (PC / Mac) */
+    @media (pointer: fine) {
+      .controls {
+        display: none !important;
+      }
     }
 
     .d-pad {
@@ -136,12 +138,9 @@
   </footer>
 
   <script>
-    // --- MASQUAGE DU PAVÉ VISUEL SUR DESKTOP (PC / MAC) ---
-    // On vérifie si l'appareil prend en charge les événements tactiles primaires
-    const isMobileOrTablet = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-    
-    if (!isMobileOrTablet) {
-      document.getElementById('controls').classList.add('hide-desktop');
+    // Sécurité supplémentaire JS pour masquer le pavé sur PC/Mac
+    if (window.matchMedia('(pointer: fine)').matches) {
+      document.getElementById('controls').style.display = 'none';
     }
 
     const canvas = document.getElementById('gameCanvas');
@@ -152,7 +151,7 @@
     const rows = 21;
     const cols = 19;
 
-    // MAP CORRIGÉE : Murs extérieurs (1) étanches en bas
+    // MAP : Tunnels latéraux ouverts (lignes 8, 9, 10 avec 2 sur les bords)
     const originalMap = [
       [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
       [1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1],
@@ -162,11 +161,11 @@
       [1,0,1,1,0,1,0,1,1,1,1,1,0,1,0,1,1,0,1],
       [1,0,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,0,1],
       [1,1,1,1,0,1,1,1,2,1,2,1,1,1,0,1,1,1,1],
-      [2,2,2,1,0,1,2,2,2,2,2,2,2,1,0,1,2,2,2],
+      [2,2,2,1,0,1,2,2,2,2,2,2,2,1,0,1,2,2,2], // Tunnel gauche (2) et droit (2)
       [1,1,1,1,0,1,2,1,1,2,1,1,2,1,0,1,1,1,1],
-      [2,2,2,2,0,2,2,1,2,2,2,1,2,2,0,2,2,2,2],
+      [2,2,2,2,0,2,2,1,2,2,2,1,2,2,0,2,2,2,2], // Tunnel passage libre
       [1,1,1,1,0,1,2,1,1,1,1,1,2,1,0,1,1,1,1],
-      [2,2,2,1,0,1,2,2,2,2,2,2,2,1,0,1,2,2,2],
+      [2,2,2,1,0,1,2,2,2,2,2,2,2,1,0,1,2,2,2], // Tunnel bas libre
       [1,1,1,1,0,1,2,1,1,1,1,1,2,1,0,1,1,1,1],
       [1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1],
       [1,0,1,1,0,1,1,1,0,1,0,1,1,1,0,1,1,0,1],
@@ -174,7 +173,7 @@
       [1,1,0,1,0,1,0,1,1,1,1,1,0,1,0,1,0,1,1],
       [1,0,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,0,1],
       [1,0,1,1,1,1,1,1,0,1,0,1,1,1,1,1,1,0,1],
-      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1] // Ligne du bas hermétique
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
     ];
 
     let map = JSON.parse(JSON.stringify(originalMap));
@@ -205,12 +204,14 @@
     function isWall(x, y) {
       let gridX = Math.floor(x);
       let gridY = Math.floor(y);
+      // Autoriser la sortie de grille uniquement pour le tunnel horizontal (lignes 8 à 12)
+      if ((gridY >= 8 && gridY <= 12) && (gridX < 0 || gridX >= cols)) return false;
       if (gridX < 0 || gridX >= cols || gridY < 0 || gridY >= rows) return true;
       return map[gridY][gridX] === 1;
     }
 
     function update() {
-      // PAC-MAN
+      // PAC-MAN : Changement de direction aux cases
       let isCenteredX = Math.abs(pacman.x - Math.round(pacman.x)) < 0.05;
       let isCenteredY = Math.abs(pacman.y - Math.round(pacman.y)) < 0.05;
 
@@ -243,7 +244,7 @@
         pacman.y = Math.round(pacman.y);
       }
 
-      // Tunnel Pac-Man (Seul endroit où traverser les bords latéraux)
+      // TRAVERSÉE TUNNEL POUR PAC-MAN
       if (pacman.x < -0.5) pacman.x = cols - 0.5;
       else if (pacman.x >= cols - 0.5) pacman.x = -0.5;
 
@@ -268,7 +269,7 @@
         pacman.mouthSpeed = -pacman.mouthSpeed;
       }
 
-      // FANTÔMES (Strictement confinés au labyrinthe)
+      // FANTÔMES ET TUNNEL
       ghosts.forEach(ghost => {
         let gIsCenteredX = Math.abs(ghost.x - Math.round(ghost.x)) < 0.05;
         let gIsCenteredY = Math.abs(ghost.y - Math.round(ghost.y)) < 0.05;
@@ -286,8 +287,7 @@
             let nextGx = gGridX + d.dx;
             let nextGy = gGridY + d.dy;
             
-            // Empêche toute sortie par les bords ou tunnels
-            if (nextGx < 1 || nextGx >= cols - 1 || nextGy < 1 || nextGy >= rows - 1) return false;
+            // Empêche le demi-tour immédiat
             if (d.dx === -ghost.dx && d.dy === -ghost.dy) return false; 
             
             return !isWall(nextGx, nextGy);
@@ -305,14 +305,12 @@
           }
         }
 
-        ghost.x += ghost.dx * (speed * 0.85);
-        ghost.y += ghost.dy * (speed * 0.85);
+        ghost.x += ghost.dx * (speed * 0.8);
+        ghost.y += ghost.dy * (speed * 0.8);
 
-        // Bloque immédiatement si un fantôme touche les bordures extérieures
-        if (ghost.x < 1) ghost.x = 1;
-        if (ghost.x >= cols - 1) ghost.x = cols - 2;
-        if (ghost.y < 1) ghost.y = 1;
-        if (ghost.y >= rows - 1) ghost.y = rows - 2;
+        // TRAVERSÉE TUNNEL POUR LES FANTÔMES
+        if (ghost.x < -0.5) ghost.x = cols - 0.5;
+        else if (ghost.x >= cols - 0.5) ghost.x = -0.5;
 
         // Collisions
         let dist = Math.hypot(ghost.x - pacman.x, ghost.y - pacman.y);
@@ -360,7 +358,7 @@
         }
       }
 
-      // Pac-Man
+      // Dessin Pac-Man
       let angle = 0;
       if (pacman.dx === 1) angle = 0;
       if (pacman.dx === -1) angle = Math.PI;
@@ -379,7 +377,7 @@
       ctx.lineTo(pacman.x * tileSize + tileSize / 2, pacman.y * tileSize + tileSize / 2);
       ctx.fill();
 
-      // Fantômes
+      // Dessin Fantômes
       ghosts.forEach(ghost => {
         ctx.fillStyle = ghost.isFrightened ? '#0000ff' : ghost.color;
         let gx = ghost.x * tileSize + tileSize / 2;
@@ -418,7 +416,7 @@
       requestAnimationFrame(gameLoop);
     }
 
-    // --- CONTROLES CLAVIER EXCLUSIFS DESKTOP ---
+    // --- CONTROLES CLAVIER (DESKTOP MAC / PC) ---
     window.addEventListener('keydown', (e) => {
       if (e.key === 'ArrowUp') {
         e.preventDefault();
@@ -434,11 +432,11 @@
         setDirection(1, 0);
       } else if (e.code === 'Space') {
         e.preventDefault();
-        setDirection(0, 0); // Arrêt de Pac-Man avec la barre d'espace
+        setDirection(0, 0); // Barre d'espace = Arrêt
       }
     });
 
-    // Événements boutons (si sur mobile/tactile)
+    // Événements boutons tactiles (mobile)
     function bindControl(buttonId, action) {
       const btn = document.getElementById(buttonId);
       if (!btn) return;
