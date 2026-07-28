@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Snake - iPhone 15 Pro</title>
+  <title>Pac-Man - iPhone 15 Pro</title>
   <style>
     * {
       box-sizing: border-box;
@@ -44,6 +44,7 @@
       font-size: 1.2rem;
       font-weight: bold;
       letter-spacing: 1px;
+      color: #ffb8ae;
     }
 
     .game-container {
@@ -59,12 +60,12 @@
 
     canvas {
       background-color: #000;
-      border: 2px solid #333;
+      border: 3px solid #1919a6;
       border-radius: 8px;
       max-width: 100%;
       max-height: 100%;
       object-fit: contain;
-      box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+      box-shadow: 0 4px 20px rgba(25, 25, 166, 0.4);
     }
 
     .controls {
@@ -100,7 +101,8 @@
     }
 
     .d-btn:active, .d-btn.active {
-      background: #555;
+      background: #ffff00;
+      color: #000;
       transform: scale(0.95);
     }
 
@@ -125,7 +127,7 @@
   </header>
 
   <main class="game-container">
-    <canvas id="gameCanvas" width="400" height="400"></canvas>
+    <canvas id="gameCanvas" width="380" height="420"></canvas>
   </main>
 
   <footer class="controls">
@@ -143,111 +145,232 @@
     const ctx = canvas.getContext('2d');
     const scoreEl = document.getElementById('score');
 
-    // --- LOGIQUE DU JEU SNAKE ---
-    const gridSize = 20;
-    const tileCount = canvas.width / gridSize;
-    
-    let snake = [{ x: 10, y: 10 }];
-    let food = { x: 15, y: 15 };
-    let dx = 0;
-    let dy = 0;
+    const tileSize = 20;
+    const rows = 21;
+    const cols = 19;
+
+    // 1: Mur, 0: Pac-Gum, 2: Vide, 3: Super Pac-Gum
+    const originalMap = [
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
+      [1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1],
+      [1,3,1,1,0,1,1,1,0,1,0,1,1,1,0,1,1,3,1],
+      [1,0,1,1,0,1,1,1,0,1,0,1,1,1,0,1,1,0,1],
+      [1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1],
+      [1,0,1,1,0,1,0,1,1,1,1,1,0,1,0,1,1,0,1],
+      [1,0,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,0,1],
+      [1,1,1,1,0,1,1,1,2,1,2,1,1,1,0,1,1,1,1],
+      [2,2,2,1,0,1,2,2,2,2,2,2,2,1,0,1,2,2,2],
+      [1,1,1,1,0,1,2,1,1,2,1,1,2,1,0,1,1,1,1],
+      [2,2,2,2,0,2,2,1,2,2,2,1,2,2,0,2,2,2,2],
+      [1,1,1,1,0,1,2,1,1,1,1,1,2,1,0,1,1,1,1],
+      [2,2,2,1,0,1,2,2,2,2,2,2,2,1,0,1,2,2,2],
+      [1,1,1,1,0,1,2,1,1,1,1,1,2,1,0,1,1,1,1],
+      [1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1],
+      [1,0,1,1,0,1,1,1,0,1,0,1,1,1,0,1,1,0,1],
+      [1,3,0,1,0,0,0,0,0,2,0,0,0,0,0,1,0,3,1],
+      [1,1,0,1,0,1,0,1,1,1,1,1,0,1,0,1,0,1,1],
+      [1,0,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,0,1],
+      [1,0,1,1,1,1,1,1,0,1,0,1,1,1,1,1,1,0,1],
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+    ];
+
+    let map = JSON.parse(JSON.stringify(originalMap));
     let score = 0;
-    let gameInterval = null;
-    let gameStarted = false;
+    let gameLoopId = null;
+    let frightenTimer = null;
 
-    function startGame() {
-      if (!gameStarted) {
-        gameStarted = true;
-        dx = 1; // Démarre vers la droite
-        dy = 0;
-        gameInterval = setInterval(gameStep, 100);
-      }
+    let pacman = {
+      x: 9, y: 16,
+      dx: 0, dy: 0,
+      nextDx: 0, nextDy: 0,
+      mouth: 0.2, mouthSpeed: 0.02
+    };
+
+    let ghosts = [
+      { x: 9, y: 8, dx: 1, dy: 0, color: '#ff0000', isFrightened: false }, // Blinky
+      { x: 9, y: 9, dx: -1, dy: 0, color: '#ffb8ff', isFrightened: false }, // Pinky
+      { x: 8, y: 9, dx: 0, dy: -1, color: '#00ffff', isFrightened: false }, // Inky
+      { x: 10, y: 9, dx: 0, dy: 1, color: '#ffb852', isFrightened: false }  // Clyde
+    ];
+
+    function setDirection(dx, dy) {
+      pacman.nextDx = dx;
+      pacman.nextDy = dy;
     }
 
-    function changeDirection(newDx, newDy) {
-      if (!gameStarted) startGame();
-      // Empêche le demi-tour direct
-      if ((newDx === -dx && newDx !== 0) || (newDy === -dy && newDy !== 0)) return;
-      dx = newDx;
-      dy = newDy;
+    function canMove(x, y, dx, dy) {
+      let nextX = x + dx;
+      let nextY = y + dy;
+
+      // Tunnel wrapping
+      if (nextX < 0 || nextX >= cols) return true;
+      if (nextY < 0 || nextY >= rows) return true;
+
+      return map[nextY][nextX] !== 1;
     }
 
-    function gameStep() {
-      // Déplacement de la tête
-      const head = { x: snake[0].x + dx, y: snake[0].y + dy };
-
-      // Collision avec les murs ou soi-même
-      if (head.x < 0 || head.x >= tileCount || head.y < 0 || head.y >= tileCount || checkSelfCollision(head)) {
-        resetGame();
-        return;
+    function update() {
+      // Tenter de tourner si la prochaine direction voulue est valide
+      if (canMove(pacman.x, pacman.y, pacman.nextDx, pacman.nextDy)) {
+        pacman.dx = pacman.nextDx;
+        pacman.dy = pacman.nextDy;
       }
 
-      snake.unshift(head);
+      // Avancer Pac-Man
+      if (canMove(pacman.x, pacman.y, pacman.dx, pacman.dy)) {
+        pacman.x += pacman.dx;
+        pacman.y += pacman.dy;
 
-      // Manger la nourriture
-      if (head.x === food.x && head.y === food.y) {
+        // Tunnel
+        if (pacman.x < 0) pacman.x = cols - 1;
+        else if (pacman.x >= cols) pacman.x = 0;
+      }
+
+      // Manger Pac-Gum
+      let currentTile = map[pacman.y][pacman.x];
+      if (currentTile === 0) {
+        map[pacman.y][pacman.x] = 2;
         score += 10;
         scoreEl.textContent = score;
-        spawnFood();
-      } else {
-        snake.pop();
+      } else if (currentTile === 3) {
+        map[pacman.y][pacman.x] = 2;
+        score += 50;
+        scoreEl.textContent = score;
+        triggerFrightenedMode();
       }
 
-      draw();
+      // Animation bouche
+      pacman.mouth += pacman.mouthSpeed;
+      if (pacman.mouth > 0.35 || pacman.mouth < 0.05) {
+        pacman.mouthSpeed = -pacman.mouthSpeed;
+      }
+
+      // Déplacer les fantômes
+      ghosts.forEach(ghost => {
+        let possibleDirs = [
+          { dx: 0, dy: -1 },
+          { dx: 0, dy: 1 },
+          { dx: -1, dy: 0 },
+          { dx: 1, dy: 0 }
+        ].filter(d => !(d.dx === -ghost.dx && d.dy === -ghost.dy) && canMove(ghost.x, ghost.y, d.dx, d.dy));
+
+        if (possibleDirs.length > 0) {
+          let choice = possibleDirs[Math.floor(Math.random() * possibleDirs.length)];
+          ghost.dx = choice.dx;
+          ghost.dy = choice.dy;
+        }
+
+        ghost.x += ghost.dx;
+        ghost.y += ghost.dy;
+
+        if (ghost.x < 0) ghost.x = cols - 1;
+        else if (ghost.x >= cols) ghost.x = 0;
+
+        // Collision avec Pac-Man
+        if (ghost.x === pacman.x && ghost.y === pacman.y) {
+          if (ghost.isFrightened) {
+            score += 200;
+            scoreEl.textContent = score;
+            ghost.x = 9;
+            ghost.y = 9;
+            ghost.isFrightened = false;
+          } else {
+            resetGame();
+          }
+        }
+      });
     }
 
-    function checkSelfCollision(head) {
-      return snake.some(segment => segment.x === head.x && segment.y === head.y);
-    }
-
-    function spawnFood() {
-      food = {
-        x: Math.floor(Math.random() * tileCount),
-        y: Math.floor(Math.random() * tileCount)
-      };
-    }
-
-    function resetGame() {
-      alert(`Game Over ! Score final : ${score}`);
-      clearInterval(gameInterval);
-      snake = [{ x: 10, y: 10 }];
-      dx = 0;
-      dy = 0;
-      score = 0;
-      scoreEl.textContent = score;
-      gameStarted = false;
-      spawnFood();
-      draw();
+    function triggerFrightenedMode() {
+      ghosts.forEach(g => g.isFrightened = true);
+      if (frightenTimer) clearTimeout(frightenTimer);
+      frightenTimer = setTimeout(() => {
+        ghosts.forEach(g => g.isFrightened = false);
+      }, 7000);
     }
 
     function draw() {
-      // Fond du terrain
-      ctx.fillStyle = '#000';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-      // Nourriture
-      ctx.fillStyle = '#ff4757';
-      ctx.fillRect(food.x * gridSize, food.y * gridSize, gridSize - 2, gridSize - 2);
-
-      // Snake
-      ctx.fillStyle = '#2ed573';
-      snake.forEach((segment, index) => {
-        // Tête légèrement plus claire
-        if (index === 0) ctx.fillStyle = '#7bed9f';
-        else ctx.fillStyle = '#2ed573';
-        ctx.fillRect(segment.x * gridSize, segment.y * gridSize, gridSize - 2, gridSize - 2);
-      });
-
-      // Message de démarrage
-      if (!gameStarted) {
-        ctx.fillStyle = '#fff';
-        ctx.font = '16px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('Appuie sur une flèche pour jouer', canvas.width / 2, canvas.height / 2);
+      // Dessiner Labyrinthe
+      for (let r = 0; r < rows; r++) {
+        for (let c = 0; c < cols; c++) {
+          if (map[r][c] === 1) {
+            ctx.fillStyle = '#1919a6';
+            ctx.fillRect(c * tileSize, r * tileSize, tileSize, tileSize);
+          } else if (map[r][c] === 0) {
+            ctx.fillStyle = '#ffb8ae';
+            ctx.beginPath();
+            ctx.arc(c * tileSize + tileSize / 2, r * tileSize + tileSize / 2, 3, 0, Math.PI * 2);
+            ctx.fill();
+          } else if (map[r][c] === 3) {
+            ctx.fillStyle = '#ffb8ae';
+            ctx.beginPath();
+            ctx.arc(c * tileSize + tileSize / 2, r * tileSize + tileSize / 2, 6, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
       }
+
+      // Dessiner Pac-Man
+      let angle = 0;
+      if (pacman.dx === 1) angle = 0;
+      if (pacman.dx === -1) angle = Math.PI;
+      if (pacman.dy === -1) angle = Math.PI * 1.5;
+      if (pacman.dy === 1) angle = Math.PI * 0.5;
+
+      ctx.fillStyle = '#ffff00';
+      ctx.beginPath();
+      ctx.arc(
+        pacman.x * tileSize + tileSize / 2,
+        pacman.y * tileSize + tileSize / 2,
+        tileSize / 2 - 1,
+        angle + pacman.mouth,
+        angle + Math.PI * 2 - pacman.mouth
+      );
+      ctx.lineTo(pacman.x * tileSize + tileSize / 2, pacman.y * tileSize + tileSize / 2);
+      ctx.fill();
+
+      // Dessiner Fantômes
+      ghosts.forEach(ghost => {
+        ctx.fillStyle = ghost.isFrightened ? '#0000ff' : ghost.color;
+        let gx = ghost.x * tileSize + tileSize / 2;
+        let gy = ghost.y * tileSize + tileSize / 2;
+
+        ctx.beginPath();
+        ctx.arc(gx, gy - 2, tileSize / 2 - 2, Math.PI, 0, false);
+        ctx.lineTo(gx + tileSize / 2 - 2, gy + tileSize / 2);
+        ctx.lineTo(gx - tileSize / 2 + 2, gy + tileSize / 2);
+        ctx.fill();
+
+        // Yeux
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(gx - 3, gy - 3, 2, 0, Math.PI * 2);
+        ctx.arc(gx + 3, gy - 3, 2, 0, Math.PI * 2);
+        ctx.fill();
+      });
     }
 
-    // --- GESTION DES COMMANDES (TACTILE & CLAVIER) ---
+    function resetGame() {
+      alert(`Game Over ! Score : ${score}`);
+      map = JSON.parse(JSON.stringify(originalMap));
+      score = 0;
+      scoreEl.textContent = score;
+      pacman.x = 9;
+      pacman.y = 16;
+      pacman.dx = 0;
+      pacman.dy = 0;
+      pacman.nextDx = 0;
+      pacman.nextDy = 0;
+    }
+
+    function gameStep() {
+      update();
+      draw();
+    }
+
+    // --- CONTRÔLES TACTILES & CLAVIER ---
     function bindTouchControl(buttonId, action) {
       const btn = document.getElementById(buttonId);
 
@@ -268,16 +391,16 @@
       btn.addEventListener('mouseup', handleRelease);
     }
 
-    bindTouchControl('btn-up', () => changeDirection(0, -1));
-    bindTouchControl('btn-down', () => changeDirection(0, 1));
-    bindTouchControl('btn-left', () => changeDirection(-1, 0));
-    bindTouchControl('btn-right', () => changeDirection(1, 0));
+    bindTouchControl('btn-up', () => setDirection(0, -1));
+    bindTouchControl('btn-down', () => setDirection(0, 1));
+    bindTouchControl('btn-left', () => setDirection(-1, 0));
+    bindTouchControl('btn-right', () => setDirection(1, 0));
 
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'ArrowUp') { changeDirection(0, -1); highlightDpad('btn-up'); }
-      if (e.key === 'ArrowDown') { changeDirection(0, 1); highlightDpad('btn-down'); }
-      if (e.key === 'ArrowLeft') { changeDirection(-1, 0); highlightDpad('btn-left'); }
-      if (e.key === 'ArrowRight') { changeDirection(1, 0); highlightDpad('btn-right'); }
+      if (e.key === 'ArrowUp') { setDirection(0, -1); highlightDpad('btn-up'); }
+      if (e.key === 'ArrowDown') { setDirection(0, 1); highlightDpad('btn-down'); }
+      if (e.key === 'ArrowLeft') { setDirection(-1, 0); highlightDpad('btn-left'); }
+      if (e.key === 'ArrowRight') { setDirection(1, 0); highlightDpad('btn-right'); }
     });
 
     window.addEventListener('keyup', () => {
@@ -289,8 +412,8 @@
       if (btn) btn.classList.add('active');
     }
 
-    // Premier rendu au chargement
-    draw();
+    // Lancement de la boucle de jeu (~4 images/sec pour vitesse fluide Pac-Man)
+    setInterval(gameStep, 200);
   </script>
 </body>
 </html>
