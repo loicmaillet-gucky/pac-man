@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Pac-Man - iOS Fluid</title>
+  <title>Pac-Man - Fixes Desktop & Fantômes</title>
   <style>
     * {
       box-sizing: border-box;
@@ -18,14 +18,12 @@
       background-color: #111;
       color: #fff;
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      
       height: 100dvh;
       width: 100vw;
       display: flex;
       flex-direction: column;
       align-items: center;
       justify-content: space-between;
-      
       padding-top: max(10px, env(safe-area-inset-top));
       padding-bottom: max(15px, env(safe-area-inset-bottom));
       padding-left: env(safe-area-inset-left);
@@ -86,11 +84,9 @@
       height: 180px;
     }
 
-    /* Masquage du D-Pad spécifiquement sur iOS (iPhone / iPad / Safari iOS) */
-    @supports (-webkit-touch-callout: none) {
-      .controls {
-        display: none !important;
-      }
+    /* Masqué dynamiquement via JavaScript sur iOS uniquement (et conservé sur Mac/PC) */
+    .controls.hide-on-ios {
+      display: none !important;
     }
 
     .d-btn {
@@ -129,7 +125,7 @@
     <canvas id="gameCanvas" width="380" height="420"></canvas>
   </main>
 
-  <footer class="controls">
+  <footer class="controls" id="controls">
     <div class="d-pad">
       <button class="d-btn btn-up" id="btn-up">▲</button>
       <button class="d-btn btn-left" id="btn-left">◄</button>
@@ -140,6 +136,14 @@
   </footer>
 
   <script>
+    // --- DETECTION IOS CIBLÉE (Caches D-Pad uniquement sur appareils mobiles iOS) ---
+    const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
+                        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+
+    if (isIOSDevice) {
+      document.getElementById('controls').classList.add('hide-on-ios');
+    }
+
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     const scoreEl = document.getElementById('score');
@@ -176,8 +180,7 @@
     let score = 0;
     let frightenTimer = null;
 
-    // Déplacement fluide en sous-pixels
-    const speed = 0.08; 
+    const speed = 0.08;
 
     let pacman = {
       x: 9, y: 16,
@@ -201,12 +204,12 @@
     function isWall(x, y) {
       let gridX = Math.floor(x);
       let gridY = Math.floor(y);
-      if (gridX < 0 || gridX >= cols || gridY < 0 || gridY >= rows) return false;
+      if (gridX < 0 || gridX >= cols || gridY < 0 || gridY >= rows) return true; // Considéré comme mur hors grille
       return map[gridY][gridX] === 1;
     }
 
     function update() {
-      // Alignement aux cases pour changer de direction proprement
+      // PAC-MAN
       let isCenteredX = Math.abs(pacman.x - Math.round(pacman.x)) < 0.05;
       let isCenteredY = Math.abs(pacman.y - Math.round(pacman.y)) < 0.05;
 
@@ -222,7 +225,6 @@
         }
       }
 
-      // Avancement Pac-Man
       let nextX = pacman.x + pacman.dx * speed;
       let nextY = pacman.y + pacman.dy * speed;
 
@@ -237,11 +239,11 @@
         pacman.y = Math.round(pacman.y);
       }
 
-      // Tunnel
+      // Tunnel Pac-Man
       if (pacman.x < -0.5) pacman.x = cols - 0.5;
       else if (pacman.x >= cols - 0.5) pacman.x = -0.5;
 
-      // Manger Pac-Gum
+      // Pac-Gums
       let gridX = Math.round(pacman.x);
       let gridY = Math.round(pacman.y);
       if (gridX >= 0 && gridX < cols && gridY >= 0 && gridY < rows) {
@@ -257,13 +259,12 @@
         }
       }
 
-      // Animation bouche
       pacman.mouth += pacman.mouthSpeed;
       if (pacman.mouth > 0.35 || pacman.mouth < 0.05) {
         pacman.mouthSpeed = -pacman.mouthSpeed;
       }
 
-      // Déplacement Fantômes
+      // FANTÔMES (Sécurisés contre les sorties de plateau)
       ghosts.forEach(ghost => {
         let gIsCenteredX = Math.abs(ghost.x - Math.round(ghost.x)) < 0.05;
         let gIsCenteredY = Math.abs(ghost.y - Math.round(ghost.y)) < 0.05;
@@ -272,12 +273,24 @@
           let gGridX = Math.round(ghost.x);
           let gGridY = Math.round(ghost.y);
 
+          // Filtrer les directions pour interdire les cases hors-grille et les murs
           let possibleDirs = [
             { dx: 0, dy: -1 },
             { dx: 0, dy: 1 },
             { dx: -1, dy: 0 },
             { dx: 1, dy: 0 }
-          ].filter(d => !(d.dx === -ghost.dx && d.dy === -ghost.dy) && !isWall(gGridX + d.dx, gGridY + d.dy));
+          ].filter(d => {
+            let nextGx = gGridX + d.dx;
+            let nextGy = gGridY + d.dy;
+            
+            // Interdit d'aller dans les tunnels de bordure
+            if (nextGx < 1 || nextGx >= cols - 1) return false; 
+            
+            // Pas de demi-tour immédiat
+            if (d.dx === -ghost.dx && d.dy === -ghost.dy) return false; 
+            
+            return !isWall(nextGx, nextGy);
+          });
 
           if (possibleDirs.length > 0) {
             let choice = possibleDirs[Math.floor(Math.random() * possibleDirs.length)];
@@ -285,16 +298,21 @@
             ghost.dy = choice.dy;
             ghost.x = gGridX;
             ghost.y = gGridY;
+          } else {
+            // Si bloqué, autoriser le demi-tour d'urgence
+            ghost.dx = -ghost.dx;
+            ghost.dy = -ghost.dy;
           }
         }
 
         ghost.x += ghost.dx * (speed * 0.85);
         ghost.y += ghost.dy * (speed * 0.85);
 
-        if (ghost.x < -0.5) ghost.x = cols - 0.5;
-        else if (ghost.x >= cols - 0.5) ghost.x = -0.5;
+        // Garde de sécurité absolue : Recentrer tout fantôme qui sortirait de la grille
+        if (ghost.x < 1) ghost.x = 1;
+        if (ghost.x >= cols - 1) ghost.x = cols - 2;
 
-        // Collision
+        // Collisions
         let dist = Math.hypot(ghost.x - pacman.x, ghost.y - pacman.y);
         if (dist < 0.6) {
           if (ghost.isFrightened) {
@@ -392,14 +410,13 @@
       pacman.nextDy = 0;
     }
 
-    // Boucle d'animation fluide 60 FPS
     function gameLoop() {
       update();
       draw();
       requestAnimationFrame(gameLoop);
     }
 
-    // --- CONTROLES TACTILES (SWIPE POUR IOS) ---
+    // --- CONTROLES TACTILES (SWIPE IOS) ---
     let touchStartX = 0;
     let touchStartY = 0;
 
@@ -419,17 +436,17 @@
       }
     }, { passive: false });
 
-    // --- CONTROLES CLAVIER & D-PAD (NON-IOS) ---
-    function bindTouchControl(buttonId, action) {
+    // --- CONTROLES BOUTONS & CLAVIER ---
+    function bindControl(buttonId, action) {
       const btn = document.getElementById(buttonId);
       if (!btn) return;
       btn.addEventListener('click', action);
     }
 
-    bindTouchControl('btn-up', () => setDirection(0, -1));
-    bindTouchControl('btn-down', () => setDirection(0, 1));
-    bindTouchControl('btn-left', () => setDirection(-1, 0));
-    bindTouchControl('btn-right', () => setDirection(1, 0));
+    bindControl('btn-up', () => setDirection(0, -1));
+    bindControl('btn-down', () => setDirection(0, 1));
+    bindControl('btn-left', () => setDirection(-1, 0));
+    bindControl('btn-right', () => setDirection(1, 0));
 
     window.addEventListener('keydown', (e) => {
       if (e.key === 'ArrowUp') setDirection(0, -1);
