@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Pac-Man - Fix Tunnel & Clavier Desktop</title>
+  <title>Pac-Man - iOS Gestes & PC/Mac Clavier</title>
   <style>
     * {
       box-sizing: border-box;
@@ -66,55 +66,10 @@
       box-shadow: 0 4px 20px rgba(25, 25, 166, 0.4);
     }
 
+    /* PAR DÉFAUT : Le pavé directionnel est TOTALEMENT MASQUÉ sur tous les appareils */
     .controls {
-      flex-shrink: 0;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      width: 100%;
-      padding-top: 5px;
+      display: none !important;
     }
-
-    /* Cacher le pavé tactile sur tous les écrans avec pointeur précis (PC / Mac) */
-    @media (pointer: fine) {
-      .controls {
-        display: none !important;
-      }
-    }
-
-    .d-pad {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      grid-template-rows: repeat(3, 1fr);
-      gap: 6px;
-      width: 180px;
-      height: 180px;
-    }
-
-    .d-btn {
-      background: #222;
-      border: 1px solid #444;
-      border-radius: 12px;
-      color: #fff;
-      font-size: 1.4rem;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      touch-action: manipulation;
-      transition: background 0.1s, transform 0.05s;
-    }
-
-    .d-btn:active, .d-btn.active {
-      background: #ffff00;
-      color: #000;
-      transform: scale(0.95);
-    }
-
-    .btn-up    { grid-column: 2; grid-row: 1; }
-    .btn-left  { grid-column: 1; grid-row: 2; }
-    .btn-center{ grid-column: 2; grid-row: 2; background: #181818; border-color: #333; }
-    .btn-right { grid-column: 3; grid-row: 2; }
-    .btn-down  { grid-column: 2; grid-row: 3; }
   </style>
 </head>
 <body>
@@ -127,22 +82,7 @@
     <canvas id="gameCanvas" width="380" height="420"></canvas>
   </main>
 
-  <footer class="controls" id="controls">
-    <div class="d-pad">
-      <button class="d-btn btn-up" id="btn-up">▲</button>
-      <button class="d-btn btn-left" id="btn-left">◄</button>
-      <div class="d-btn btn-center"></div>
-      <button class="d-btn btn-right" id="btn-right">►</button>
-      <button class="d-btn btn-down" id="btn-down">▼</button>
-    </div>
-  </footer>
-
   <script>
-    // Sécurité supplémentaire JS pour masquer le pavé sur PC/Mac
-    if (window.matchMedia('(pointer: fine)').matches) {
-      document.getElementById('controls').style.display = 'none';
-    }
-
     const canvas = document.getElementById('gameCanvas');
     const ctx = canvas.getContext('2d');
     const scoreEl = document.getElementById('score');
@@ -151,7 +91,6 @@
     const rows = 21;
     const cols = 19;
 
-    // MAP : Tunnels latéraux ouverts (lignes 8, 9, 10 avec 2 sur les bords)
     const originalMap = [
       [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
       [1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1],
@@ -161,11 +100,11 @@
       [1,0,1,1,0,1,0,1,1,1,1,1,0,1,0,1,1,0,1],
       [1,0,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,0,1],
       [1,1,1,1,0,1,1,1,2,1,2,1,1,1,0,1,1,1,1],
-      [2,2,2,1,0,1,2,2,2,2,2,2,2,1,0,1,2,2,2], // Tunnel gauche (2) et droit (2)
+      [2,2,2,1,0,1,2,2,2,2,2,2,2,1,0,1,2,2,2],
       [1,1,1,1,0,1,2,1,1,2,1,1,2,1,0,1,1,1,1],
-      [2,2,2,2,0,2,2,1,2,2,2,1,2,2,0,2,2,2,2], // Tunnel passage libre
+      [2,2,2,2,0,2,2,1,2,2,2,1,2,2,0,2,2,2,2],
       [1,1,1,1,0,1,2,1,1,1,1,1,2,1,0,1,1,1,1],
-      [2,2,2,1,0,1,2,2,2,2,2,2,2,1,0,1,2,2,2], // Tunnel bas libre
+      [2,2,2,1,0,1,2,2,2,2,2,2,2,1,0,1,2,2,2],
       [1,1,1,1,0,1,2,1,1,1,1,1,2,1,0,1,1,1,1],
       [1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1],
       [1,0,1,1,0,1,1,1,0,1,0,1,1,1,0,1,1,0,1],
@@ -204,14 +143,12 @@
     function isWall(x, y) {
       let gridX = Math.floor(x);
       let gridY = Math.floor(y);
-      // Autoriser la sortie de grille uniquement pour le tunnel horizontal (lignes 8 à 12)
       if ((gridY >= 8 && gridY <= 12) && (gridX < 0 || gridX >= cols)) return false;
       if (gridX < 0 || gridX >= cols || gridY < 0 || gridY >= rows) return true;
       return map[gridY][gridX] === 1;
     }
 
     function update() {
-      // PAC-MAN : Changement de direction aux cases
       let isCenteredX = Math.abs(pacman.x - Math.round(pacman.x)) < 0.05;
       let isCenteredY = Math.abs(pacman.y - Math.round(pacman.y)) < 0.05;
 
@@ -244,11 +181,9 @@
         pacman.y = Math.round(pacman.y);
       }
 
-      // TRAVERSÉE TUNNEL POUR PAC-MAN
       if (pacman.x < -0.5) pacman.x = cols - 0.5;
       else if (pacman.x >= cols - 0.5) pacman.x = -0.5;
 
-      // Pac-Gums
       let gridX = Math.round(pacman.x);
       let gridY = Math.round(pacman.y);
       if (gridX >= 0 && gridX < cols && gridY >= 0 && gridY < rows) {
@@ -269,7 +204,6 @@
         pacman.mouthSpeed = -pacman.mouthSpeed;
       }
 
-      // FANTÔMES ET TUNNEL
       ghosts.forEach(ghost => {
         let gIsCenteredX = Math.abs(ghost.x - Math.round(ghost.x)) < 0.05;
         let gIsCenteredY = Math.abs(ghost.y - Math.round(ghost.y)) < 0.05;
@@ -286,10 +220,7 @@
           ].filter(d => {
             let nextGx = gGridX + d.dx;
             let nextGy = gGridY + d.dy;
-            
-            // Empêche le demi-tour immédiat
             if (d.dx === -ghost.dx && d.dy === -ghost.dy) return false; 
-            
             return !isWall(nextGx, nextGy);
           });
 
@@ -308,11 +239,9 @@
         ghost.x += ghost.dx * (speed * 0.8);
         ghost.y += ghost.dy * (speed * 0.8);
 
-        // TRAVERSÉE TUNNEL POUR LES FANTÔMES
         if (ghost.x < -0.5) ghost.x = cols - 0.5;
         else if (ghost.x >= cols - 0.5) ghost.x = -0.5;
 
-        // Collisions
         let dist = Math.hypot(ghost.x - pacman.x, ghost.y - pacman.y);
         if (dist < 0.6) {
           if (ghost.isFrightened) {
@@ -358,7 +287,6 @@
         }
       }
 
-      // Dessin Pac-Man
       let angle = 0;
       if (pacman.dx === 1) angle = 0;
       if (pacman.dx === -1) angle = Math.PI;
@@ -377,7 +305,6 @@
       ctx.lineTo(pacman.x * tileSize + tileSize / 2, pacman.y * tileSize + tileSize / 2);
       ctx.fill();
 
-      // Dessin Fantômes
       ghosts.forEach(ghost => {
         ctx.fillStyle = ghost.isFrightened ? '#0000ff' : ghost.color;
         let gx = ghost.x * tileSize + tileSize / 2;
@@ -416,38 +343,66 @@
       requestAnimationFrame(gameLoop);
     }
 
-    // --- CONTROLES CLAVIER (DESKTOP MAC / PC) ---
+    // --- CONTRÔLES TACTILES EXCLUSIVEMENT PAR GESTES (SWIPE) ---
+    let touchStartX = 0;
+    let touchStartY = 0;
+
+    document.addEventListener('touchstart', (e) => {
+      touchStartX = e.touches[0].clientX;
+      touchStartY = e.touches[0].clientY;
+    }, { passive: true });
+
+    document.addEventListener('touchmove', (e) => {
+      if (e.cancelable) e.preventDefault(); // Empêche le défilement de la page
+    }, { passive: false });
+
+    document.addEventListener('touchend', (e) => {
+      let dx = e.changedTouches[0].clientX - touchStartX;
+      let dy = e.changedTouches[0].clientY - touchStartY;
+      const threshold = 15; // Sensibilité du glissement (en pixels)
+
+      if (Math.abs(dx) > threshold || Math.abs(dy) > threshold) {
+        if (Math.abs(dx) > Math.abs(dy)) {
+          setDirection(dx > 0 ? 1 : -1, 0); // Droite / Gauche
+        } else {
+          setDirection(0, dy > 0 ? 1 : -1); // Bas / Haut
+        }
+      }
+    }, { passive: true });
+
+    // --- CONTRÔLES CLAVIER (PC & MAC) ---
     window.addEventListener('keydown', (e) => {
-      if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        setDirection(0, -1);
-      } else if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        setDirection(0, 1);
-      } else if (e.key === 'ArrowLeft') {
-        e.preventDefault();
-        setDirection(-1, 0);
-      } else if (e.key === 'ArrowRight') {
-        e.preventDefault();
-        setDirection(1, 0);
-      } else if (e.code === 'Space') {
-        e.preventDefault();
-        setDirection(0, 0); // Barre d'espace = Arrêt
+      switch (e.key) {
+        case 'ArrowUp':
+        case 'z':
+        case 'Z':
+          e.preventDefault();
+          setDirection(0, -1);
+          break;
+        case 'ArrowDown':
+        case 's':
+        case 'S':
+          e.preventDefault();
+          setDirection(0, 1);
+          break;
+        case 'ArrowLeft':
+        case 'q':
+        case 'Q':
+          e.preventDefault();
+          setDirection(-1, 0);
+          break;
+        case 'ArrowRight':
+        case 'd':
+        case 'D':
+          e.preventDefault();
+          setDirection(1, 0);
+          break;
+        case ' ':
+          e.preventDefault();
+          setDirection(0, 0);
+          break;
       }
     });
-
-    // Événements boutons tactiles (mobile)
-    function bindControl(buttonId, action) {
-      const btn = document.getElementById(buttonId);
-      if (!btn) return;
-      btn.addEventListener('touchstart', (e) => { e.preventDefault(); action(); });
-      btn.addEventListener('click', action);
-    }
-
-    bindControl('btn-up', () => setDirection(0, -1));
-    bindControl('btn-down', () => setDirection(0, 1));
-    bindControl('btn-left', () => setDirection(-1, 0));
-    bindControl('btn-right', () => setDirection(1, 0));
 
     requestAnimationFrame(gameLoop);
   </script>
