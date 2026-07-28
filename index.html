@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-  <title>Pac-Man - Fixes Desktop & Fantômes</title>
+  <title>Pac-Man - Fixes Final</title>
   <style>
     * {
       box-sizing: border-box;
@@ -75,6 +75,11 @@
       padding-top: 5px;
     }
 
+    /* Masqué sur PC/Mac via JavaScript */
+    .controls.hide-desktop {
+      display: none !important;
+    }
+
     .d-pad {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -82,11 +87,6 @@
       gap: 6px;
       width: 180px;
       height: 180px;
-    }
-
-    /* Masqué dynamiquement via JavaScript sur iOS uniquement (et conservé sur Mac/PC) */
-    .controls.hide-on-ios {
-      display: none !important;
     }
 
     .d-btn {
@@ -136,12 +136,12 @@
   </footer>
 
   <script>
-    // --- DETECTION IOS CIBLÉE (Caches D-Pad uniquement sur appareils mobiles iOS) ---
-    const isIOSDevice = /iPad|iPhone|iPod/.test(navigator.userAgent) || 
-                        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-
-    if (isIOSDevice) {
-      document.getElementById('controls').classList.add('hide-on-ios');
+    // --- MASQUAGE DU PAVÉ VISUEL SUR DESKTOP (PC / MAC) ---
+    // On vérifie si l'appareil prend en charge les événements tactiles primaires
+    const isMobileOrTablet = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+    
+    if (!isMobileOrTablet) {
+      document.getElementById('controls').classList.add('hide-desktop');
     }
 
     const canvas = document.getElementById('gameCanvas');
@@ -152,6 +152,7 @@
     const rows = 21;
     const cols = 19;
 
+    // MAP CORRIGÉE : Murs extérieurs (1) étanches en bas
     const originalMap = [
       [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1],
       [1,0,0,0,0,0,0,0,0,1,0,0,0,0,0,0,0,0,1],
@@ -173,7 +174,7 @@
       [1,1,0,1,0,1,0,1,1,1,1,1,0,1,0,1,0,1,1],
       [1,0,0,0,0,1,0,0,0,1,0,0,0,1,0,0,0,0,1],
       [1,0,1,1,1,1,1,1,0,1,0,1,1,1,1,1,1,0,1],
-      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1]
+      [1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1] // Ligne du bas hermétique
     ];
 
     let map = JSON.parse(JSON.stringify(originalMap));
@@ -204,7 +205,7 @@
     function isWall(x, y) {
       let gridX = Math.floor(x);
       let gridY = Math.floor(y);
-      if (gridX < 0 || gridX >= cols || gridY < 0 || gridY >= rows) return true; // Considéré comme mur hors grille
+      if (gridX < 0 || gridX >= cols || gridY < 0 || gridY >= rows) return true;
       return map[gridY][gridX] === 1;
     }
 
@@ -217,7 +218,10 @@
         let currentGridX = Math.round(pacman.x);
         let currentGridY = Math.round(pacman.y);
 
-        if (!isWall(currentGridX + pacman.nextDx, currentGridY + pacman.nextDy)) {
+        if (pacman.nextDx === 0 && pacman.nextDy === 0) {
+          pacman.dx = 0;
+          pacman.dy = 0;
+        } else if (!isWall(currentGridX + pacman.nextDx, currentGridY + pacman.nextDy)) {
           pacman.dx = pacman.nextDx;
           pacman.dy = pacman.nextDy;
           pacman.x = currentGridX;
@@ -239,7 +243,7 @@
         pacman.y = Math.round(pacman.y);
       }
 
-      // Tunnel Pac-Man
+      // Tunnel Pac-Man (Seul endroit où traverser les bords latéraux)
       if (pacman.x < -0.5) pacman.x = cols - 0.5;
       else if (pacman.x >= cols - 0.5) pacman.x = -0.5;
 
@@ -264,7 +268,7 @@
         pacman.mouthSpeed = -pacman.mouthSpeed;
       }
 
-      // FANTÔMES (Sécurisés contre les sorties de plateau)
+      // FANTÔMES (Strictement confinés au labyrinthe)
       ghosts.forEach(ghost => {
         let gIsCenteredX = Math.abs(ghost.x - Math.round(ghost.x)) < 0.05;
         let gIsCenteredY = Math.abs(ghost.y - Math.round(ghost.y)) < 0.05;
@@ -273,7 +277,6 @@
           let gGridX = Math.round(ghost.x);
           let gGridY = Math.round(ghost.y);
 
-          // Filtrer les directions pour interdire les cases hors-grille et les murs
           let possibleDirs = [
             { dx: 0, dy: -1 },
             { dx: 0, dy: 1 },
@@ -283,10 +286,8 @@
             let nextGx = gGridX + d.dx;
             let nextGy = gGridY + d.dy;
             
-            // Interdit d'aller dans les tunnels de bordure
-            if (nextGx < 1 || nextGx >= cols - 1) return false; 
-            
-            // Pas de demi-tour immédiat
+            // Empêche toute sortie par les bords ou tunnels
+            if (nextGx < 1 || nextGx >= cols - 1 || nextGy < 1 || nextGy >= rows - 1) return false;
             if (d.dx === -ghost.dx && d.dy === -ghost.dy) return false; 
             
             return !isWall(nextGx, nextGy);
@@ -299,7 +300,6 @@
             ghost.x = gGridX;
             ghost.y = gGridY;
           } else {
-            // Si bloqué, autoriser le demi-tour d'urgence
             ghost.dx = -ghost.dx;
             ghost.dy = -ghost.dy;
           }
@@ -308,9 +308,11 @@
         ghost.x += ghost.dx * (speed * 0.85);
         ghost.y += ghost.dy * (speed * 0.85);
 
-        // Garde de sécurité absolue : Recentrer tout fantôme qui sortirait de la grille
+        // Bloque immédiatement si un fantôme touche les bordures extérieures
         if (ghost.x < 1) ghost.x = 1;
         if (ghost.x >= cols - 1) ghost.x = cols - 2;
+        if (ghost.y < 1) ghost.y = 1;
+        if (ghost.y >= rows - 1) ghost.y = rows - 2;
 
         // Collisions
         let dist = Math.hypot(ghost.x - pacman.x, ghost.y - pacman.y);
@@ -416,30 +418,31 @@
       requestAnimationFrame(gameLoop);
     }
 
-    // --- CONTROLES TACTILES (SWIPE IOS) ---
-    let touchStartX = 0;
-    let touchStartY = 0;
-
-    window.addEventListener('touchstart', (e) => {
-      touchStartX = e.touches[0].clientX;
-      touchStartY = e.touches[0].clientY;
-    }, { passive: false });
-
-    window.addEventListener('touchend', (e) => {
-      let dx = e.changedTouches[0].clientX - touchStartX;
-      let dy = e.changedTouches[0].clientY - touchStartY;
-
-      if (Math.abs(dx) > Math.abs(dy)) {
-        if (Math.abs(dx) > 20) setDirection(dx > 0 ? 1 : -1, 0);
-      } else {
-        if (Math.abs(dy) > 20) setDirection(0, dy > 0 ? 1 : -1);
+    // --- CONTROLES CLAVIER EXCLUSIFS DESKTOP ---
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setDirection(0, -1);
+      } else if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setDirection(0, 1);
+      } else if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        setDirection(-1, 0);
+      } else if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        setDirection(1, 0);
+      } else if (e.code === 'Space') {
+        e.preventDefault();
+        setDirection(0, 0); // Arrêt de Pac-Man avec la barre d'espace
       }
-    }, { passive: false });
+    });
 
-    // --- CONTROLES BOUTONS & CLAVIER ---
+    // Événements boutons (si sur mobile/tactile)
     function bindControl(buttonId, action) {
       const btn = document.getElementById(buttonId);
       if (!btn) return;
+      btn.addEventListener('touchstart', (e) => { e.preventDefault(); action(); });
       btn.addEventListener('click', action);
     }
 
@@ -447,13 +450,6 @@
     bindControl('btn-down', () => setDirection(0, 1));
     bindControl('btn-left', () => setDirection(-1, 0));
     bindControl('btn-right', () => setDirection(1, 0));
-
-    window.addEventListener('keydown', (e) => {
-      if (e.key === 'ArrowUp') setDirection(0, -1);
-      if (e.key === 'ArrowDown') setDirection(0, 1);
-      if (e.key === 'ArrowLeft') setDirection(-1, 0);
-      if (e.key === 'ArrowRight') setDirection(1, 0);
-    });
 
     requestAnimationFrame(gameLoop);
   </script>
